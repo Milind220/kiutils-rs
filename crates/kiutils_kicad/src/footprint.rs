@@ -19,6 +19,7 @@ pub struct FootprintAst {
     pub tags: Option<String>,
     pub property_count: usize,
     pub attr_present: bool,
+    pub locked_present: bool,
     pub private_layers_present: bool,
     pub net_tie_pad_groups_present: bool,
     pub embedded_fonts_present: bool,
@@ -127,6 +128,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
     let mut tags = None;
     let mut property_count = 0usize;
     let mut attr_present = false;
+    let mut locked_present = false;
     let mut private_layers_present = false;
     let mut net_tie_pad_groups_present = false;
     let mut embedded_fonts_present = false;
@@ -157,6 +159,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
                 Some("tags") => tags = second_atom_string(item),
                 Some("property") => property_count += 1,
                 Some("attr") => attr_present = true,
+                Some("locked") => locked_present = true,
                 Some("private_layers") => private_layers_present = true,
                 Some("net_tie_pad_groups") => net_tie_pad_groups_present = true,
                 Some("embedded_fonts") => embedded_fonts_present = true,
@@ -215,6 +218,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
         tags,
         property_count,
         attr_present,
+        locked_present,
         private_layers_present,
         net_tie_pad_groups_present,
         embedded_fonts_present,
@@ -374,6 +378,7 @@ mod tests {
         assert_eq!(doc.ast().layer.as_deref(), Some("F.Cu"));
         assert_eq!(doc.ast().property_count, 2);
         assert!(doc.ast().attr_present);
+        assert!(!doc.ast().locked_present);
         assert!(doc.ast().private_layers_present);
         assert!(doc.ast().net_tie_pad_groups_present);
         assert!(!doc.ast().embedded_fonts_present);
@@ -397,6 +402,19 @@ mod tests {
 
         let doc = FootprintFile::read(&path).expect("read");
         assert!(doc.ast().embedded_fonts_present);
+        assert!(doc.ast().unknown_nodes.is_empty());
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn parses_locked_regression() {
+        let path = tmp_file("footprint_locked");
+        let src = "(footprint \"X\" (locked) (version 20260101) (generator pcbnew))\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let doc = FootprintFile::read(&path).expect("read");
+        assert!(doc.ast().locked_present);
         assert!(doc.ast().unknown_nodes.is_empty());
 
         let _ = fs::remove_file(path);
