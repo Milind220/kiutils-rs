@@ -10,7 +10,31 @@ use crate::{Error, UnknownNode, WriteMode};
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FootprintAst {
+    pub lib_id: Option<String>,
     pub version: Option<i32>,
+    pub generator: Option<String>,
+    pub generator_version: Option<String>,
+    pub layer: Option<String>,
+    pub descr: Option<String>,
+    pub tags: Option<String>,
+    pub property_count: usize,
+    pub attr_present: bool,
+    pub private_layers_present: bool,
+    pub net_tie_pad_groups_present: bool,
+    pub embedded_fonts_present: bool,
+    pub pad_count: usize,
+    pub model_count: usize,
+    pub zone_count: usize,
+    pub group_count: usize,
+    pub fp_line_count: usize,
+    pub fp_rect_count: usize,
+    pub fp_circle_count: usize,
+    pub fp_arc_count: usize,
+    pub fp_poly_count: usize,
+    pub fp_curve_count: usize,
+    pub fp_text_count: usize,
+    pub fp_text_box_count: usize,
+    pub graphic_count: usize,
     pub unknown_nodes: Vec<UnknownNode>,
 }
 
@@ -58,10 +82,7 @@ impl FootprintFile {
         let raw = fs::read_to_string(path)?;
         let cst = parse_one(&raw)?;
         ensure_head(&cst, "footprint")?;
-        let ast = FootprintAst {
-            version: find_version(&cst),
-            unknown_nodes: find_unknown_nodes(&cst),
-        };
+        let ast = parse_ast(&cst);
         let diagnostics = validate_version(ast.version)?;
         Ok(FootprintDocument {
             ast,
@@ -96,58 +117,161 @@ fn ensure_head(cst: &CstDocument, expected: &str) -> Result<(), Error> {
     }
 }
 
-fn find_version(cst: &CstDocument) -> Option<i32> {
+fn parse_ast(cst: &CstDocument) -> FootprintAst {
+    let mut lib_id = None;
+    let mut version = None;
+    let mut generator = None;
+    let mut generator_version = None;
+    let mut layer = None;
+    let mut descr = None;
+    let mut tags = None;
+    let mut property_count = 0usize;
+    let mut attr_present = false;
+    let mut private_layers_present = false;
+    let mut net_tie_pad_groups_present = false;
+    let mut embedded_fonts_present = false;
+    let mut pad_count = 0usize;
+    let mut model_count = 0usize;
+    let mut zone_count = 0usize;
+    let mut group_count = 0usize;
+    let mut fp_line_count = 0usize;
+    let mut fp_rect_count = 0usize;
+    let mut fp_circle_count = 0usize;
+    let mut fp_arc_count = 0usize;
+    let mut fp_poly_count = 0usize;
+    let mut fp_curve_count = 0usize;
+    let mut fp_text_count = 0usize;
+    let mut fp_text_box_count = 0usize;
+    let mut graphic_count = 0usize;
+    let mut unknown_nodes = Vec::new();
+
     if let Some(Node::List { items, .. }) = cst.nodes.first() {
-        for item in items {
-            if let Node::List { items: inner, .. } = item {
-                if let [
-                    Node::Atom {
-                        atom: Atom::Symbol(head),
-                        ..
-                    },
-                    Node::Atom {
-                        atom: Atom::Symbol(v),
-                        ..
-                    },
-                    ..,
-                ] = inner.as_slice()
-                {
-                    if head == "version" {
-                        return v.parse::<i32>().ok();
+        lib_id = items.get(1).and_then(atom_as_string);
+        for item in items.iter().skip(2) {
+            match head_of(item) {
+                Some("version") => version = second_atom_i32(item),
+                Some("generator") => generator = second_atom_string(item),
+                Some("generator_version") => generator_version = second_atom_string(item),
+                Some("layer") => layer = second_atom_string(item),
+                Some("descr") => descr = second_atom_string(item),
+                Some("tags") => tags = second_atom_string(item),
+                Some("property") => property_count += 1,
+                Some("attr") => attr_present = true,
+                Some("private_layers") => private_layers_present = true,
+                Some("net_tie_pad_groups") => net_tie_pad_groups_present = true,
+                Some("embedded_fonts") => embedded_fonts_present = true,
+                Some("pad") => pad_count += 1,
+                Some("model") => model_count += 1,
+                Some("zone") => zone_count += 1,
+                Some("group") => group_count += 1,
+                Some("fp_line") => {
+                    fp_line_count += 1;
+                    graphic_count += 1;
+                }
+                Some("fp_rect") => {
+                    fp_rect_count += 1;
+                    graphic_count += 1;
+                }
+                Some("fp_circle") => {
+                    fp_circle_count += 1;
+                    graphic_count += 1;
+                }
+                Some("fp_arc") => {
+                    fp_arc_count += 1;
+                    graphic_count += 1;
+                }
+                Some("fp_poly") => {
+                    fp_poly_count += 1;
+                    graphic_count += 1;
+                }
+                Some("fp_curve") => {
+                    fp_curve_count += 1;
+                    graphic_count += 1;
+                }
+                Some("fp_text") => {
+                    fp_text_count += 1;
+                    graphic_count += 1;
+                }
+                Some("fp_text_box") => {
+                    fp_text_box_count += 1;
+                    graphic_count += 1;
+                }
+                _ => {
+                    if let Some(unknown) = UnknownNode::from_node(item) {
+                        unknown_nodes.push(unknown);
                     }
                 }
             }
         }
     }
-    None
+
+    FootprintAst {
+        lib_id,
+        version,
+        generator,
+        generator_version,
+        layer,
+        descr,
+        tags,
+        property_count,
+        attr_present,
+        private_layers_present,
+        net_tie_pad_groups_present,
+        embedded_fonts_present,
+        pad_count,
+        model_count,
+        zone_count,
+        group_count,
+        fp_line_count,
+        fp_rect_count,
+        fp_circle_count,
+        fp_arc_count,
+        fp_poly_count,
+        fp_curve_count,
+        fp_text_count,
+        fp_text_box_count,
+        graphic_count,
+        unknown_nodes,
+    }
 }
 
-fn find_unknown_nodes(cst: &CstDocument) -> Vec<UnknownNode> {
-    let mut out = Vec::new();
-    let known_heads = ["version", "generator"];
-    if let Some(Node::List { items, .. }) = cst.nodes.first() {
-        for (idx, item) in items.iter().enumerate() {
-            if idx <= 1 {
-                continue;
-            }
-            if let Node::List { items: inner, .. } = item {
-                if let Some(Node::Atom {
-                    atom: Atom::Symbol(head),
-                    ..
-                }) = inner.first()
-                {
-                    if known_heads.contains(&head.as_str()) {
-                        continue;
-                    }
-                }
-            }
+fn head_of(node: &Node) -> Option<&str> {
+    let Node::List { items, .. } = node else {
+        return None;
+    };
+    let Some(Node::Atom {
+        atom: Atom::Symbol(head),
+        ..
+    }) = items.first()
+    else {
+        return None;
+    };
+    Some(head.as_str())
+}
 
-            if let Some(unknown) = UnknownNode::from_node(item) {
-                out.push(unknown);
-            }
-        }
+fn atom_as_string(node: &Node) -> Option<String> {
+    match node {
+        Node::Atom {
+            atom: Atom::Symbol(v),
+            ..
+        } => Some(v.clone()),
+        Node::Atom {
+            atom: Atom::Quoted(v),
+            ..
+        } => Some(v.clone()),
+        _ => None,
     }
-    out
+}
+
+fn second_atom_string(node: &Node) -> Option<String> {
+    let Node::List { items, .. } = node else {
+        return None;
+    };
+    items.get(1).and_then(atom_as_string)
+}
+
+fn second_atom_i32(node: &Node) -> Option<i32> {
+    second_atom_string(node).and_then(|s| s.parse::<i32>().ok())
 }
 
 fn validate_version(version: Option<i32>) -> Result<Vec<Diagnostic>, Error> {
@@ -200,7 +324,9 @@ mod tests {
         fs::write(&path, src).expect("write fixture");
 
         let doc = FootprintFile::read(&path).expect("read");
+        assert_eq!(doc.ast().lib_id.as_deref(), Some("R_0603"));
         assert_eq!(doc.ast().version, Some(20260101));
+        assert_eq!(doc.ast().generator.as_deref(), Some("pcbnew"));
         assert!(doc.ast().unknown_nodes.is_empty());
         assert_eq!(doc.cst().to_lossless_string(), src);
 
@@ -232,6 +358,46 @@ mod tests {
         let doc = FootprintFile::read(&path).expect("read");
         assert_eq!(doc.ast().unknown_nodes.len(), 1);
         assert_eq!(doc.ast().unknown_nodes[0].head.as_deref(), Some("future_shape"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn read_footprint_parses_top_level_counts() {
+        let path = tmp_file("footprint_counts");
+        let src = "(footprint \"X\" (version 20260101) (generator pcbnew) (generator_version \"10.0\") (layer \"F.Cu\")\n  (descr \"demo\")\n  (tags \"a b\")\n  (property \"Reference\" \"R?\")\n  (property \"Value\" \"X\")\n  (attr smd)\n  (private_layers \"In1.Cu\")\n  (net_tie_pad_groups \"1,2\")\n  (fp_text reference \"R1\" (at 0 0) (layer \"F.SilkS\"))\n  (fp_line (start 0 0) (end 1 1) (layer \"F.SilkS\"))\n  (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\" \"F.Mask\"))\n  (model \"foo.step\")\n  (zone)\n  (group (id \"g1\"))\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let doc = FootprintFile::read(&path).expect("read");
+        assert_eq!(doc.ast().lib_id.as_deref(), Some("X"));
+        assert_eq!(doc.ast().generator_version.as_deref(), Some("10.0"));
+        assert_eq!(doc.ast().layer.as_deref(), Some("F.Cu"));
+        assert_eq!(doc.ast().property_count, 2);
+        assert!(doc.ast().attr_present);
+        assert!(doc.ast().private_layers_present);
+        assert!(doc.ast().net_tie_pad_groups_present);
+        assert!(!doc.ast().embedded_fonts_present);
+        assert_eq!(doc.ast().fp_text_count, 1);
+        assert_eq!(doc.ast().fp_line_count, 1);
+        assert_eq!(doc.ast().graphic_count, 2);
+        assert_eq!(doc.ast().pad_count, 1);
+        assert_eq!(doc.ast().model_count, 1);
+        assert_eq!(doc.ast().zone_count, 1);
+        assert_eq!(doc.ast().group_count, 1);
+        assert!(doc.ast().unknown_nodes.is_empty());
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn parses_embedded_fonts_regression() {
+        let path = tmp_file("footprint_embedded_fonts");
+        let src = "(footprint \"X\" (version 20260101) (generator pcbnew) (embedded_fonts no))\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let doc = FootprintFile::read(&path).expect("read");
+        assert!(doc.ast().embedded_fonts_present);
+        assert!(doc.ast().unknown_nodes.is_empty());
 
         let _ = fs::remove_file(path);
     }
