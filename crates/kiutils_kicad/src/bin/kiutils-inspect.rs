@@ -454,6 +454,8 @@ fn inspect_footprint(opts: &Opts) -> Result<(), String> {
                 "private_layers_present": doc.ast().private_layers_present,
                 "net_tie_pad_groups_present": doc.ast().net_tie_pad_groups_present,
                 "embedded_fonts_present": doc.ast().embedded_fonts_present,
+                "has_embedded_files": doc.ast().has_embedded_files,
+                "embedded_file_count": doc.ast().embedded_file_count,
                 "solder_mask_margin": doc.ast().solder_mask_margin,
                 "solder_paste_margin": doc.ast().solder_paste_margin,
                 "solder_paste_margin_ratio": doc.ast().solder_paste_margin_ratio,
@@ -497,6 +499,8 @@ fn inspect_footprint(opts: &Opts) -> Result<(), String> {
             doc.ast().net_tie_pad_groups_present
         );
         println!("embedded_fonts_present: {}", doc.ast().embedded_fonts_present);
+        println!("has_embedded_files: {}", doc.ast().has_embedded_files);
+        println!("embedded_file_count: {}", doc.ast().embedded_file_count);
         println!("solder_mask_margin: {:?}", doc.ast().solder_mask_margin);
         println!("solder_paste_margin: {:?}", doc.ast().solder_paste_margin);
         println!(
