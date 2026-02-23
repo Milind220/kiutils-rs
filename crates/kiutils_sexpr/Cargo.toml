@@ -1,0 +1,16 @@
+[package]
+name = "kiutils_sexpr"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+authors = ["Milind Sharma"]
+description = "Lossless S-expression CST parser/printer for KiCad files"
+
+[dependencies]
+thiserror.workspace = true
+
+[features]
+default = ["lossless"]
+lossless = []
