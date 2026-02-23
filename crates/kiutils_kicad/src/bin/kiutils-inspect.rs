@@ -140,52 +140,88 @@ fn detect_kind(path: &Path) -> Option<Kind> {
 fn inspect_pcb(opts: &Opts) -> Result<(), String> {
     let doc = PcbFile::read(&opts.path).map_err(|e| e.to_string())?;
     if opts.as_json {
-        println!(
-            "{}",
-            json!({
-                "kind": "pcb",
-                "path": opts.path,
-                "version": doc.ast().version,
-                "generator": doc.ast().generator,
-                "generator_version": doc.ast().generator_version,
-                "parsed_layer_entries": doc.ast().layers.len(),
-                "parsed_net_entries": doc.ast().nets.len(),
-                "parsed_footprint_entries": doc.ast().footprints.len(),
-                "parsed_segment_entries": doc.ast().segments.len(),
-                "parsed_arc_entries": doc.ast().arcs.len(),
-                "parsed_via_entries": doc.ast().vias.len(),
-                "parsed_zone_entries": doc.ast().zones.len(),
-                "first_layer": doc.ast().layers.first().and_then(|l| l.name.clone()),
-                "first_net": doc.ast().nets.first().and_then(|n| n.name.clone()),
-                "first_footprint_lib_id": doc.ast().footprints.first().and_then(|f| f.lib_id.clone()),
-                "first_footprint_ref": doc.ast().footprints.first().and_then(|f| f.reference.clone()),
-                "first_segment_layer": doc.ast().segments.first().and_then(|s| s.layer.clone()),
-                "first_zone_net_name": doc.ast().zones.first().and_then(|z| z.net_name.clone()),
-                "layer_count": doc.ast().layer_count,
-                "property_count": doc.ast().property_count,
-                "net_count": doc.ast().net_count,
-                "footprint_count": doc.ast().footprint_count,
-                "graphic_count": doc.ast().graphic_count,
-                "gr_line_count": doc.ast().gr_line_count,
-                "gr_rect_count": doc.ast().gr_rect_count,
-                "gr_circle_count": doc.ast().gr_circle_count,
-                "gr_arc_count": doc.ast().gr_arc_count,
-                "gr_poly_count": doc.ast().gr_poly_count,
-                "gr_curve_count": doc.ast().gr_curve_count,
-                "gr_text_count": doc.ast().gr_text_count,
-                "gr_text_box_count": doc.ast().gr_text_box_count,
-                "trace_segment_count": doc.ast().trace_segment_count,
-                "trace_arc_count": doc.ast().trace_arc_count,
-                "via_count": doc.ast().via_count,
-                "zone_count": doc.ast().zone_count,
-                "dimension_count": doc.ast().dimension_count,
-                "target_count": doc.ast().target_count,
-                "group_count": doc.ast().group_count,
-                "generated_count": doc.ast().generated_count,
-                "unknown_count": doc.ast().unknown_nodes.len(),
-                "diagnostic_count": doc.diagnostics().len(),
-            })
+        let mut m = serde_json::Map::new();
+        m.insert("kind".into(), json!("pcb"));
+        m.insert("path".into(), json!(opts.path));
+        m.insert("version".into(), json!(doc.ast().version));
+        m.insert("generator".into(), json!(doc.ast().generator));
+        m.insert("generator_version".into(), json!(doc.ast().generator_version));
+        m.insert("parsed_layer_entries".into(), json!(doc.ast().layers.len()));
+        m.insert("parsed_net_entries".into(), json!(doc.ast().nets.len()));
+        m.insert("parsed_footprint_entries".into(), json!(doc.ast().footprints.len()));
+        m.insert("parsed_segment_entries".into(), json!(doc.ast().segments.len()));
+        m.insert("parsed_arc_entries".into(), json!(doc.ast().arcs.len()));
+        m.insert("parsed_via_entries".into(), json!(doc.ast().vias.len()));
+        m.insert("parsed_zone_entries".into(), json!(doc.ast().zones.len()));
+        m.insert("parsed_generated_entries".into(), json!(doc.ast().generated_items.len()));
+        m.insert(
+            "first_layer".into(),
+            json!(doc.ast().layers.first().and_then(|l| l.name.clone())),
         );
+        m.insert(
+            "first_net".into(),
+            json!(doc.ast().nets.first().and_then(|n| n.name.clone())),
+        );
+        m.insert(
+            "first_footprint_lib_id".into(),
+            json!(doc.ast().footprints.first().and_then(|f| f.lib_id.clone())),
+        );
+        m.insert(
+            "first_footprint_ref".into(),
+            json!(doc.ast().footprints.first().and_then(|f| f.reference.clone())),
+        );
+        m.insert(
+            "first_segment_layer".into(),
+            json!(doc.ast().segments.first().and_then(|s| s.layer.clone())),
+        );
+        m.insert(
+            "first_zone_net_name".into(),
+            json!(doc.ast().zones.first().and_then(|z| z.net_name.clone())),
+        );
+        m.insert(
+            "first_zone_layer".into(),
+            json!(doc.ast().zones.first().and_then(|z| z.layer.clone())),
+        );
+        m.insert(
+            "first_zone_layers_len".into(),
+            json!(doc.ast().zones.first().map(|z| z.layers.len())),
+        );
+        m.insert(
+            "first_zone_fill_enabled".into(),
+            json!(doc.ast().zones.first().and_then(|z| z.fill_enabled)),
+        );
+        m.insert(
+            "first_generated_type".into(),
+            json!(doc.ast().generated_items.first().and_then(|g| g.generated_type.clone())),
+        );
+        m.insert(
+            "first_generated_last_netname".into(),
+            json!(doc.ast().generated_items.first().and_then(|g| g.last_netname.clone())),
+        );
+        m.insert("layer_count".into(), json!(doc.ast().layer_count));
+        m.insert("property_count".into(), json!(doc.ast().property_count));
+        m.insert("net_count".into(), json!(doc.ast().net_count));
+        m.insert("footprint_count".into(), json!(doc.ast().footprint_count));
+        m.insert("graphic_count".into(), json!(doc.ast().graphic_count));
+        m.insert("gr_line_count".into(), json!(doc.ast().gr_line_count));
+        m.insert("gr_rect_count".into(), json!(doc.ast().gr_rect_count));
+        m.insert("gr_circle_count".into(), json!(doc.ast().gr_circle_count));
+        m.insert("gr_arc_count".into(), json!(doc.ast().gr_arc_count));
+        m.insert("gr_poly_count".into(), json!(doc.ast().gr_poly_count));
+        m.insert("gr_curve_count".into(), json!(doc.ast().gr_curve_count));
+        m.insert("gr_text_count".into(), json!(doc.ast().gr_text_count));
+        m.insert("gr_text_box_count".into(), json!(doc.ast().gr_text_box_count));
+        m.insert("trace_segment_count".into(), json!(doc.ast().trace_segment_count));
+        m.insert("trace_arc_count".into(), json!(doc.ast().trace_arc_count));
+        m.insert("via_count".into(), json!(doc.ast().via_count));
+        m.insert("zone_count".into(), json!(doc.ast().zone_count));
+        m.insert("dimension_count".into(), json!(doc.ast().dimension_count));
+        m.insert("target_count".into(), json!(doc.ast().target_count));
+        m.insert("group_count".into(), json!(doc.ast().group_count));
+        m.insert("generated_count".into(), json!(doc.ast().generated_count));
+        m.insert("unknown_count".into(), json!(doc.ast().unknown_nodes.len()));
+        m.insert("diagnostic_count".into(), json!(doc.diagnostics().len()));
+        println!("{}", serde_json::Value::Object(m));
     } else {
         println!("kind: pcb");
         println!("path: {}", opts.path.display());
@@ -199,6 +235,7 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
         println!("parsed_arc_entries: {}", doc.ast().arcs.len());
         println!("parsed_via_entries: {}", doc.ast().vias.len());
         println!("parsed_zone_entries: {}", doc.ast().zones.len());
+        println!("parsed_generated_entries: {}", doc.ast().generated_items.len());
         println!(
             "first_layer: {:?}",
             doc.ast().layers.first().and_then(|l| l.name.clone())
@@ -222,6 +259,32 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
         println!(
             "first_zone_net_name: {:?}",
             doc.ast().zones.first().and_then(|z| z.net_name.clone())
+        );
+        println!(
+            "first_zone_layer: {:?}",
+            doc.ast().zones.first().and_then(|z| z.layer.clone())
+        );
+        println!(
+            "first_zone_layers_len: {:?}",
+            doc.ast().zones.first().map(|z| z.layers.len())
+        );
+        println!(
+            "first_zone_fill_enabled: {:?}",
+            doc.ast().zones.first().and_then(|z| z.fill_enabled)
+        );
+        println!(
+            "first_generated_type: {:?}",
+            doc.ast()
+                .generated_items
+                .first()
+                .and_then(|g| g.generated_type.clone())
+        );
+        println!(
+            "first_generated_last_netname: {:?}",
+            doc.ast()
+                .generated_items
+                .first()
+                .and_then(|g| g.last_netname.clone())
         );
         println!("layer_count: {}", doc.ast().layer_count);
         println!("property_count: {}", doc.ast().property_count);

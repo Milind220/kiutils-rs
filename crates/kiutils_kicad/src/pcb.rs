@@ -72,6 +72,22 @@ pub struct PcbZoneSummary {
     pub name: Option<String>,
     pub layer: Option<String>,
     pub layers: Vec<String>,
+    pub hatch: Option<String>,
+    pub fill_enabled: Option<bool>,
+    pub polygon_count: usize,
+    pub filled_polygon_count: usize,
+    pub has_keepout: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbGeneratedSummary {
+    pub uuid: Option<String>,
+    pub generated_type: Option<String>,
+    pub name: Option<String>,
+    pub layer: Option<String>,
+    pub last_netname: Option<String>,
+    pub members_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -92,6 +108,7 @@ pub struct PcbAst {
     pub arcs: Vec<PcbArcSummary>,
     pub vias: Vec<PcbViaSummary>,
     pub zones: Vec<PcbZoneSummary>,
+    pub generated_items: Vec<PcbGeneratedSummary>,
     pub layer_count: usize,
     pub property_count: usize,
     pub net_count: usize,
@@ -213,6 +230,7 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
     let mut arcs = Vec::new();
     let mut vias = Vec::new();
     let mut zones = Vec::new();
+    let mut generated_items = Vec::new();
     let mut layer_count = 0usize;
     let mut property_count = 0usize;
     let mut net_count = 0usize;
@@ -290,7 +308,10 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 Some("dimension") => dimension_count += 1,
                 Some("target") => target_count += 1,
                 Some("group") => group_count += 1,
-                Some("generated") => generated_count += 1,
+                Some("generated") => {
+                    generated_count += 1;
+                    generated_items.push(parse_generated_summary(item));
+                }
                 Some("gr_line") => {
                     graphic_count += 1;
                     gr_line_count += 1;
@@ -349,6 +370,7 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
         arcs,
         vias,
         zones,
+        generated_items,
         layer_count,
         property_count,
         net_count,
@@ -588,6 +610,11 @@ fn parse_zone_summary(node: &Node) -> PcbZoneSummary {
     let mut name = None;
     let mut layer = None;
     let mut layers = Vec::new();
+    let mut hatch = None;
+    let mut fill_enabled = None;
+    let mut polygon_count = 0usize;
+    let mut filled_polygon_count = 0usize;
+    let mut has_keepout = false;
     if let Node::List { items, .. } = node {
         for child in items.iter().skip(1) {
             match head_of(child) {
@@ -600,6 +627,11 @@ fn parse_zone_summary(node: &Node) -> PcbZoneSummary {
                         layers = inner.iter().skip(1).filter_map(atom_as_string).collect();
                     }
                 }
+                Some("hatch") => hatch = second_atom_string(child),
+                Some("fill") => fill_enabled = second_atom_bool(child),
+                Some("polygon") => polygon_count += 1,
+                Some("filled_polygon") => filled_polygon_count += 1,
+                Some("keepout") => has_keepout = true,
                 _ => {}
             }
         }
@@ -610,6 +642,47 @@ fn parse_zone_summary(node: &Node) -> PcbZoneSummary {
         name,
         layer,
         layers,
+        hatch,
+        fill_enabled,
+        polygon_count,
+        filled_polygon_count,
+        has_keepout,
+    }
+}
+
+fn parse_generated_summary(node: &Node) -> PcbGeneratedSummary {
+    let mut uuid = None;
+    let mut generated_type = None;
+    let mut name = None;
+    let mut layer = None;
+    let mut last_netname = None;
+    let mut members_count = 0usize;
+
+    if let Node::List { items, .. } = node {
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("uuid") => uuid = second_atom_string(child),
+                Some("type") => generated_type = second_atom_string(child),
+                Some("name") => name = second_atom_string(child),
+                Some("layer") => layer = second_atom_string(child),
+                Some("last_netname") => last_netname = second_atom_string(child),
+                Some("members") => {
+                    if let Some(members) = second_atom_string(child) {
+                        members_count = members.split_whitespace().count();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    PcbGeneratedSummary {
+        uuid,
+        generated_type,
+        name,
+        layer,
+        last_netname,
+        members_count,
     }
 }
 
@@ -637,6 +710,14 @@ fn second_atom_i32(node: &Node) -> Option<i32> {
 
 fn second_atom_f64(node: &Node) -> Option<f64> {
     second_atom_string(node).and_then(|s| s.parse::<f64>().ok())
+}
+
+fn second_atom_bool(node: &Node) -> Option<bool> {
+    match second_atom_string(node).as_deref() {
+        Some("yes") => Some(true),
+        Some("no") => Some(false),
+        _ => None,
+    }
 }
 
 fn parse_xy(node: &Node) -> Option<[f64; 2]> {
@@ -812,6 +893,7 @@ mod tests {
         assert_eq!(doc.ast().vias[0].layers.len(), 2);
         assert_eq!(doc.ast().zone_count, 1);
         assert_eq!(doc.ast().zones.len(), 1);
+        assert_eq!(doc.ast().zones[0].polygon_count, 0);
         assert!(doc.ast().has_setup);
         assert!(doc.ast().unknown_nodes.is_empty());
 

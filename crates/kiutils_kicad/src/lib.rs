@@ -30,8 +30,8 @@ pub use footprint::{FootprintAst, FootprintDocument, FootprintFile};
 pub use lib_table::{FpLibTableAst, FpLibTableDocument, FpLibTableFile};
 pub use unknown::{UnknownField, UnknownNode};
 pub use pcb::{
-    PcbArcSummary, PcbAst, PcbDocument, PcbFile, PcbFootprintSummary, PcbLayer, PcbNet,
-    PcbSegmentSummary, PcbViaSummary, PcbZoneSummary,
+    PcbArcSummary, PcbAst, PcbDocument, PcbFile, PcbFootprintSummary, PcbGeneratedSummary,
+    PcbLayer, PcbNet, PcbSegmentSummary, PcbViaSummary, PcbZoneSummary,
 };
 pub use project::{ProjectAst, ProjectDocument, ProjectExtra, ProjectFile};
 pub use version::{KiCadSeries, VersionPolicy};
