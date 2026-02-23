@@ -456,6 +456,7 @@ fn inspect_footprint(opts: &Opts) -> Result<(), String> {
                 "embedded_fonts_present": doc.ast().embedded_fonts_present,
                 "has_embedded_files": doc.ast().has_embedded_files,
                 "embedded_file_count": doc.ast().embedded_file_count,
+                "clearance": doc.ast().clearance,
                 "solder_mask_margin": doc.ast().solder_mask_margin,
                 "solder_paste_margin": doc.ast().solder_paste_margin,
                 "solder_paste_margin_ratio": doc.ast().solder_paste_margin_ratio,
@@ -501,6 +502,7 @@ fn inspect_footprint(opts: &Opts) -> Result<(), String> {
         println!("embedded_fonts_present: {}", doc.ast().embedded_fonts_present);
         println!("has_embedded_files: {}", doc.ast().has_embedded_files);
         println!("embedded_file_count: {}", doc.ast().embedded_file_count);
+        println!("clearance: {:?}", doc.ast().clearance);
         println!("solder_mask_margin: {:?}", doc.ast().solder_mask_margin);
         println!("solder_paste_margin: {:?}", doc.ast().solder_paste_margin);
         println!(
