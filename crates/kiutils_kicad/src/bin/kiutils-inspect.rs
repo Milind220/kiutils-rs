@@ -454,6 +454,10 @@ fn inspect_footprint(opts: &Opts) -> Result<(), String> {
                 "private_layers_present": doc.ast().private_layers_present,
                 "net_tie_pad_groups_present": doc.ast().net_tie_pad_groups_present,
                 "embedded_fonts_present": doc.ast().embedded_fonts_present,
+                "solder_mask_margin": doc.ast().solder_mask_margin,
+                "solder_paste_margin": doc.ast().solder_paste_margin,
+                "solder_paste_margin_ratio": doc.ast().solder_paste_margin_ratio,
+                "duplicate_pad_numbers_are_jumpers": doc.ast().duplicate_pad_numbers_are_jumpers,
                 "pad_count": doc.ast().pad_count,
                 "model_count": doc.ast().model_count,
                 "zone_count": doc.ast().zone_count,
@@ -493,6 +497,16 @@ fn inspect_footprint(opts: &Opts) -> Result<(), String> {
             doc.ast().net_tie_pad_groups_present
         );
         println!("embedded_fonts_present: {}", doc.ast().embedded_fonts_present);
+        println!("solder_mask_margin: {:?}", doc.ast().solder_mask_margin);
+        println!("solder_paste_margin: {:?}", doc.ast().solder_paste_margin);
+        println!(
+            "solder_paste_margin_ratio: {:?}",
+            doc.ast().solder_paste_margin_ratio
+        );
+        println!(
+            "duplicate_pad_numbers_are_jumpers: {:?}",
+            doc.ast().duplicate_pad_numbers_are_jumpers
+        );
         println!("pad_count: {}", doc.ast().pad_count);
         println!("model_count: {}", doc.ast().model_count);
         println!("zone_count: {}", doc.ast().zone_count);
