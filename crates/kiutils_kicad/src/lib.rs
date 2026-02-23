@@ -1,3 +1,4 @@
+mod batch;
 mod diagnostic;
 mod dru;
 mod error;
@@ -9,6 +10,7 @@ mod project;
 mod version;
 mod write_mode;
 
+pub use batch::{read_pcbs, read_pcbs_from_refs};
 pub use diagnostic::{Diagnostic, Severity, Span};
 pub use dru::{DesignRulesAst, DesignRulesDocument, DesignRulesFile};
 pub use error::Error;

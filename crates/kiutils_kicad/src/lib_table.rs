@@ -6,6 +6,7 @@ use kiutils_sexpr::{parse_one, Atom, CstDocument, Node};
 use crate::{Error, UnknownNode, WriteMode};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FpLibTableAst {
     pub library_count: usize,
     pub unknown_nodes: Vec<UnknownNode>,

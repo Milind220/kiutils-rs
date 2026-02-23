@@ -14,6 +14,8 @@ Current status:
   - `kiutils_sexpr`: lossless S-expression CST parser
   - `kiutils_kicad`: typed KiCad API layer
 - Implemented: initial `PcbFile::read` path with lossless write-back and tests
+- Implemented: typed readers for PCB/footprint/lib-table/design-rules/project
+- Implemented: unknown token/field capture and `WriteMode::{Lossless, Canonical}`
 
 Design goals:
 - KiCad v10 primary, v9 secondary
@@ -25,6 +27,13 @@ Design goals:
 
 ```bash
 cargo test
+```
+
+Feature checks:
+
+```bash
+cargo test -p kiutils_kicad --features serde
+cargo test -p kiutils_kicad --features parallel
 ```
 
 ## License

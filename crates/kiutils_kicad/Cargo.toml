@@ -11,3 +11,10 @@ description = "KiCad typed AST and file codecs built on kiutils_sexpr"
 thiserror.workspace = true
 serde_json.workspace = true
 kiutils_sexpr = { path = "../kiutils_sexpr" }
+serde = { workspace = true, optional = true }
+rayon = { version = "1.10", optional = true }
+
+[features]
+default = []
+serde = ["dep:serde", "kiutils_sexpr/serde"]
+parallel = ["dep:rayon"]

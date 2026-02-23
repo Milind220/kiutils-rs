@@ -8,6 +8,7 @@ use crate::version::VersionPolicy;
 use crate::{Error, UnknownNode, WriteMode};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FootprintAst {
     pub version: Option<i32>,
     pub unknown_nodes: Vec<UnknownNode>,

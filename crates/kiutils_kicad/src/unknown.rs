@@ -2,6 +2,7 @@ use kiutils_sexpr::{Atom, Node, Span as CstSpan};
 use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct UnknownNode {
     pub head: Option<String>,
     pub span: CstSpan,
@@ -35,6 +36,7 @@ impl UnknownNode {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct UnknownField {
     pub key: String,
     pub value: Value,

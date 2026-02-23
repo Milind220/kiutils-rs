@@ -6,6 +6,7 @@ use kiutils_sexpr::{parse_rootless, Atom, CstDocument, Node};
 use crate::{Error, UnknownNode, WriteMode};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DesignRulesAst {
     pub version: Option<i32>,
     pub rule_count: usize,

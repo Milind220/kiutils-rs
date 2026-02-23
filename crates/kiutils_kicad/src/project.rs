@@ -7,6 +7,7 @@ use serde_json::Value;
 use crate::{Error, UnknownField, WriteMode};
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProjectAst {
     pub meta_version: Option<i32>,
     pub pinned_footprint_libs: Vec<String>,

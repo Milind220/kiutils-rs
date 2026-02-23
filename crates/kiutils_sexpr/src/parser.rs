@@ -1,24 +1,28 @@
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Span {
     pub start: usize,
     pub end: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Atom {
     Symbol(String),
     Quoted(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Node {
     List { items: Vec<Node>, span: Span },
     Atom { atom: Atom, span: Span },
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CstDocument {
     pub raw: String,
     pub nodes: Vec<Node>,

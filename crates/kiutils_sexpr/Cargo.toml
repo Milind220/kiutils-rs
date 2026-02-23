@@ -10,7 +10,9 @@ description = "Lossless S-expression CST parser/printer for KiCad files"
 
 [dependencies]
 thiserror.workspace = true
+serde = { workspace = true, optional = true }
 
 [features]
 default = ["lossless"]
 lossless = []
+serde = ["dep:serde"]
