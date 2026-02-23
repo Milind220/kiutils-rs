@@ -786,10 +786,11 @@ fn parse_dimension_summary(node: &Node) -> PcbDimensionSummary {
     let mut gr_text_count = 0usize;
     let mut format_present = false;
     if let Node::List { items, .. } = node {
-        // Sometimes second token is kind: (dimension aligned ...)
+        // Some formats use: (dimension aligned ...), others: (dimension (type aligned) ...)
         dimension_type = items.get(1).and_then(atom_as_string);
         for child in items.iter().skip(1) {
             match head_of(child) {
+                Some("type") => dimension_type = second_atom_string(child),
                 Some("layer") => layer = second_atom_string(child),
                 Some("gr_text") => gr_text_count += 1,
                 Some("format") => format_present = true,
@@ -1161,6 +1162,23 @@ mod tests {
         assert!(doc.ast().has_embedded_files);
         assert_eq!(doc.ast().embedded_file_count, 2);
         assert!(doc.ast().unknown_nodes.is_empty());
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn parses_dimension_type_child_token_regression() {
+        let path = tmp_file("pcb_dimension_type");
+        let src = "(kicad_pcb (version 20260101) (generator pcbnew)\n  (dimension\n    (type aligned)\n    (layer \"Cmts.User\")\n    (format (units 2))\n    (gr_text \"10.0 mm\" (at 0 0))\n  )\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let doc = PcbFile::read(&path).expect("read");
+        assert_eq!(doc.ast().dimension_count, 1);
+        assert_eq!(doc.ast().dimensions.len(), 1);
+        assert_eq!(doc.ast().dimensions[0].dimension_type.as_deref(), Some("aligned"));
+        assert_eq!(doc.ast().dimensions[0].layer.as_deref(), Some("Cmts.User"));
+        assert!(doc.ast().dimensions[0].format_present);
+        assert_eq!(doc.ast().dimensions[0].gr_text_count, 1);
 
         let _ = fs::remove_file(path);
     }
