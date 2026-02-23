@@ -23,6 +23,8 @@ pub struct FootprintAst {
     pub private_layers_present: bool,
     pub net_tie_pad_groups_present: bool,
     pub embedded_fonts_present: bool,
+    pub has_embedded_files: bool,
+    pub embedded_file_count: usize,
     pub solder_mask_margin: Option<String>,
     pub solder_paste_margin: Option<String>,
     pub solder_paste_margin_ratio: Option<String>,
@@ -136,6 +138,8 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
     let mut private_layers_present = false;
     let mut net_tie_pad_groups_present = false;
     let mut embedded_fonts_present = false;
+    let mut has_embedded_files = false;
+    let mut embedded_file_count = 0usize;
     let mut solder_mask_margin = None;
     let mut solder_paste_margin = None;
     let mut solder_paste_margin_ratio = None;
@@ -171,6 +175,10 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
                 Some("private_layers") => private_layers_present = true,
                 Some("net_tie_pad_groups") => net_tie_pad_groups_present = true,
                 Some("embedded_fonts") => embedded_fonts_present = true,
+                Some("embedded_files") => {
+                    has_embedded_files = true;
+                    embedded_file_count = list_child_head_count(item, "file");
+                }
                 Some("solder_mask_margin") => solder_mask_margin = second_atom_string(item),
                 Some("solder_paste_margin") => solder_paste_margin = second_atom_string(item),
                 Some("solder_paste_margin_ratio") => {
@@ -244,6 +252,8 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
         private_layers_present,
         net_tie_pad_groups_present,
         embedded_fonts_present,
+        has_embedded_files,
+        embedded_file_count,
         solder_mask_margin,
         solder_paste_margin,
         solder_paste_margin_ratio,
@@ -302,6 +312,16 @@ fn second_atom_string(node: &Node) -> Option<String> {
 
 fn second_atom_i32(node: &Node) -> Option<i32> {
     second_atom_string(node).and_then(|s| s.parse::<i32>().ok())
+}
+
+fn list_child_head_count(node: &Node, head: &str) -> usize {
+    let Node::List { items, .. } = node else {
+        return 0;
+    };
+    items
+        .iter()
+        .filter(|child| matches!(head_of(child), Some(h) if h == head))
+        .count()
 }
 
 fn validate_version(version: Option<i32>) -> Result<Vec<Diagnostic>, Error> {
@@ -408,6 +428,8 @@ mod tests {
         assert!(doc.ast().private_layers_present);
         assert!(doc.ast().net_tie_pad_groups_present);
         assert!(!doc.ast().embedded_fonts_present);
+        assert!(!doc.ast().has_embedded_files);
+        assert_eq!(doc.ast().embedded_file_count, 0);
         assert_eq!(doc.ast().solder_mask_margin.as_deref(), Some("0.02"));
         assert_eq!(doc.ast().solder_paste_margin.as_deref(), Some("-0.01"));
         assert_eq!(doc.ast().solder_paste_margin_ratio.as_deref(), Some("-0.2"));
@@ -461,6 +483,20 @@ mod tests {
         assert_eq!(doc.ast().solder_paste_margin.as_deref(), Some("-0.02"));
         assert_eq!(doc.ast().solder_paste_margin_ratio.as_deref(), Some("-0.3"));
         assert_eq!(doc.ast().duplicate_pad_numbers_are_jumpers, Some(false));
+        assert!(doc.ast().unknown_nodes.is_empty());
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn parses_embedded_files_regression() {
+        let path = tmp_file("footprint_embedded_files");
+        let src = "(footprint \"X\" (version 20260101) (generator pcbnew)\n  (embedded_files\n    (file \"A\" \"base64\")\n    (file \"B\" \"base64\")\n  )\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let doc = FootprintFile::read(&path).expect("read");
+        assert!(doc.ast().has_embedded_files);
+        assert_eq!(doc.ast().embedded_file_count, 2);
         assert!(doc.ast().unknown_nodes.is_empty());
 
         let _ = fs::remove_file(path);
