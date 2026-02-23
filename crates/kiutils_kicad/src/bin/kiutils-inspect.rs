@@ -146,6 +146,10 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
         m.insert("version".into(), json!(doc.ast().version));
         m.insert("generator".into(), json!(doc.ast().generator));
         m.insert("generator_version".into(), json!(doc.ast().generator_version));
+        m.insert(
+            "parsed_property_entries".into(),
+            json!(doc.ast().properties.len()),
+        );
         m.insert("parsed_layer_entries".into(), json!(doc.ast().layers.len()));
         m.insert("parsed_net_entries".into(), json!(doc.ast().nets.len()));
         m.insert("parsed_footprint_entries".into(), json!(doc.ast().footprints.len()));
@@ -198,6 +202,22 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
             "first_generated_last_netname".into(),
             json!(doc.ast().generated_items.first().and_then(|g| g.last_netname.clone())),
         );
+        m.insert(
+            "setup_has_stackup".into(),
+            json!(doc.ast().setup.as_ref().map(|s| s.has_stackup)),
+        );
+        m.insert(
+            "setup_stackup_layer_count".into(),
+            json!(doc.ast().setup.as_ref().map(|s| s.stackup_layer_count)),
+        );
+        m.insert(
+            "setup_has_plot_settings".into(),
+            json!(doc.ast().setup.as_ref().map(|s| s.has_plot_settings)),
+        );
+        m.insert(
+            "setup_pad_to_mask_clearance".into(),
+            json!(doc.ast().setup.as_ref().and_then(|s| s.pad_to_mask_clearance)),
+        );
         m.insert("layer_count".into(), json!(doc.ast().layer_count));
         m.insert("property_count".into(), json!(doc.ast().property_count));
         m.insert("net_count".into(), json!(doc.ast().net_count));
@@ -228,6 +248,7 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
         println!("version: {:?}", doc.ast().version);
         println!("generator: {:?}", doc.ast().generator);
         println!("generator_version: {:?}", doc.ast().generator_version);
+        println!("parsed_property_entries: {}", doc.ast().properties.len());
         println!("parsed_layer_entries: {}", doc.ast().layers.len());
         println!("parsed_net_entries: {}", doc.ast().nets.len());
         println!("parsed_footprint_entries: {}", doc.ast().footprints.len());
@@ -285,6 +306,22 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
                 .generated_items
                 .first()
                 .and_then(|g| g.last_netname.clone())
+        );
+        println!(
+            "setup_has_stackup: {:?}",
+            doc.ast().setup.as_ref().map(|s| s.has_stackup)
+        );
+        println!(
+            "setup_stackup_layer_count: {:?}",
+            doc.ast().setup.as_ref().map(|s| s.stackup_layer_count)
+        );
+        println!(
+            "setup_has_plot_settings: {:?}",
+            doc.ast().setup.as_ref().map(|s| s.has_plot_settings)
+        );
+        println!(
+            "setup_pad_to_mask_clearance: {:?}",
+            doc.ast().setup.as_ref().and_then(|s| s.pad_to_mask_clearance)
         );
         println!("layer_count: {}", doc.ast().layer_count);
         println!("property_count: {}", doc.ast().property_count);

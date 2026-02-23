@@ -90,6 +90,26 @@ pub struct PcbGeneratedSummary {
     pub members_count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbProperty {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbSetupSummary {
+    pub has_stackup: bool,
+    pub stackup_layer_count: usize,
+    pub has_plot_settings: bool,
+    pub pad_to_mask_clearance: Option<f64>,
+    pub solder_mask_min_width: Option<f64>,
+    pub aux_axis_origin: Option<[f64; 2]>,
+    pub grid_origin: Option<[f64; 2]>,
+    pub setup_tokens: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PcbAst {
@@ -100,7 +120,9 @@ pub struct PcbAst {
     pub has_paper: bool,
     pub has_title_block: bool,
     pub has_setup: bool,
+    pub setup: Option<PcbSetupSummary>,
     pub has_embedded_fonts: bool,
+    pub properties: Vec<PcbProperty>,
     pub layers: Vec<PcbLayer>,
     pub nets: Vec<PcbNet>,
     pub footprints: Vec<PcbFootprintSummary>,
@@ -222,7 +244,9 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
     let mut has_paper = false;
     let mut has_title_block = false;
     let mut has_setup = false;
+    let mut setup = None;
     let mut has_embedded_fonts = false;
+    let mut properties = Vec::new();
     let mut layers = Vec::new();
     let mut nets = Vec::new();
     let mut footprints = Vec::new();
@@ -278,9 +302,17 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                         layer_count = layers.len();
                     }
                 }
-                Some("setup") => has_setup = true,
+                Some("setup") => {
+                    has_setup = true;
+                    setup = Some(parse_setup_summary(item));
+                }
                 Some("embedded_fonts") => has_embedded_fonts = true,
-                Some("property") => property_count += 1,
+                Some("property") => {
+                    property_count += 1;
+                    if let Some(p) = parse_property(item) {
+                        properties.push(p);
+                    }
+                }
                 Some("net") => {
                     net_count += 1;
                     nets.push(parse_net(item));
@@ -362,7 +394,9 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
         has_paper,
         has_title_block,
         has_setup,
+        setup,
         has_embedded_fonts,
+        properties,
         layers,
         nets,
         footprints,
@@ -686,6 +720,65 @@ fn parse_generated_summary(node: &Node) -> PcbGeneratedSummary {
     }
 }
 
+fn parse_property(node: &Node) -> Option<PcbProperty> {
+    let Node::List { items, .. } = node else {
+        return None;
+    };
+    if !matches!(items.first().and_then(atom_as_string).as_deref(), Some("property")) {
+        return None;
+    }
+    let key = items.get(1).and_then(atom_as_string)?;
+    let value = items.get(2).and_then(atom_as_string)?;
+    Some(PcbProperty { key, value })
+}
+
+fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
+    let mut has_stackup = false;
+    let mut stackup_layer_count = 0usize;
+    let mut has_plot_settings = false;
+    let mut pad_to_mask_clearance = None;
+    let mut solder_mask_min_width = None;
+    let mut aux_axis_origin = None;
+    let mut grid_origin = None;
+    let mut setup_tokens = Vec::new();
+
+    if let Node::List { items, .. } = node {
+        for child in items.iter().skip(1) {
+            if let Some(head) = head_of(child) {
+                setup_tokens.push(head.to_string());
+                match head {
+                    "stackup" => {
+                        has_stackup = true;
+                        if let Node::List { items: stackup_items, .. } = child {
+                            stackup_layer_count = stackup_items
+                                .iter()
+                                .filter(|n| matches!(head_of(n), Some("layer")))
+                                .count();
+                        }
+                    }
+                    "pcbplotparams" => has_plot_settings = true,
+                    "pad_to_mask_clearance" => pad_to_mask_clearance = second_atom_f64(child),
+                    "solder_mask_min_width" => solder_mask_min_width = second_atom_f64(child),
+                    "aux_axis_origin" => aux_axis_origin = parse_xy(child),
+                    "grid_origin" => grid_origin = parse_xy(child),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    PcbSetupSummary {
+        has_stackup,
+        stackup_layer_count,
+        has_plot_settings,
+        pad_to_mask_clearance,
+        solder_mask_min_width,
+        aux_axis_origin,
+        grid_origin,
+        setup_tokens,
+    }
+}
+
 fn atom_as_string(node: &Node) -> Option<String> {
     match node {
         Node::Atom {
@@ -870,13 +963,23 @@ mod tests {
     #[test]
     fn parses_top_level_counts() {
         let path = tmp_file("pcb_counts");
-        let src = "(kicad_pcb (version 20260101) (generator pcbnew)\n  (layers (0 F.Cu signal) (31 B.Cu signal))\n  (setup)\n  (net 0 \"\")\n  (footprint \"R_0603\")\n  (gr_line (start 0 0) (end 1 1))\n  (segment (start 0 0) (end 1 1) (width 0.25) (layer F.Cu) (net 0))\n  (via (at 0 0) (size 1) (drill 0.5) (layers F.Cu B.Cu))\n  (zone)\n)\n";
+        let src = "(kicad_pcb (version 20260101) (generator pcbnew)\n  (property \"Owner\" \"Milind\")\n  (layers (0 F.Cu signal) (31 B.Cu signal))\n  (setup (stackup (layer \"F.Cu\" (type \"copper\")) (layer \"B.Cu\" (type \"copper\"))) (pcbplotparams) (pad_to_mask_clearance 0.1) (solder_mask_min_width 0.0) (aux_axis_origin 10 20) (grid_origin 11 21))\n  (net 0 \"\")\n  (footprint \"R_0603\")\n  (gr_line (start 0 0) (end 1 1))\n  (segment (start 0 0) (end 1 1) (width 0.25) (layer F.Cu) (net 0))\n  (via (at 0 0) (size 1) (drill 0.5) (layers F.Cu B.Cu))\n  (zone)\n)\n";
         fs::write(&path, src).expect("write fixture");
 
         let doc = PcbFile::read(&path).expect("read");
         assert_eq!(doc.ast().layer_count, 2);
         assert_eq!(doc.ast().layers.len(), 2);
         assert_eq!(doc.ast().layers[0].name.as_deref(), Some("F.Cu"));
+        assert_eq!(doc.ast().property_count, 1);
+        assert_eq!(doc.ast().properties.len(), 1);
+        assert_eq!(doc.ast().properties[0].key, "Owner");
+        assert_eq!(doc.ast().setup.as_ref().map(|s| s.has_stackup), Some(true));
+        assert_eq!(doc.ast().setup.as_ref().map(|s| s.stackup_layer_count), Some(2));
+        assert_eq!(doc.ast().setup.as_ref().map(|s| s.has_plot_settings), Some(true));
+        assert_eq!(
+            doc.ast().setup.as_ref().and_then(|s| s.pad_to_mask_clearance),
+            Some(0.1)
+        );
         assert_eq!(doc.ast().net_count, 1);
         assert_eq!(doc.ast().nets.len(), 1);
         assert_eq!(doc.ast().nets[0].name.as_deref(), Some(""));
