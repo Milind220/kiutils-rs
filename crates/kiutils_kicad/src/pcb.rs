@@ -117,6 +117,17 @@ pub struct PcbGroupSummary {
     pub member_count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbGraphicSummary {
+    pub token: String,
+    pub layer: Option<String>,
+    pub text: Option<String>,
+    pub start: Option<[f64; 2]>,
+    pub end: Option<[f64; 2]>,
+    pub center: Option<[f64; 2]>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PcbProperty {
@@ -163,6 +174,7 @@ pub struct PcbAst {
     pub dimensions: Vec<PcbDimensionSummary>,
     pub targets: Vec<PcbTargetSummary>,
     pub groups: Vec<PcbGroupSummary>,
+    pub graphics: Vec<PcbGraphicSummary>,
     pub layer_count: usize,
     pub property_count: usize,
     pub net_count: usize,
@@ -292,6 +304,7 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
     let mut dimensions = Vec::new();
     let mut targets = Vec::new();
     let mut groups = Vec::new();
+    let mut graphics = Vec::new();
     let mut layer_count = 0usize;
     let mut property_count = 0usize;
     let mut net_count = 0usize;
@@ -402,36 +415,47 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 Some("gr_line") => {
                     graphic_count += 1;
                     gr_line_count += 1;
+                    graphics.push(parse_graphic_summary(item, "gr_line"));
                 }
                 Some("gr_rect") => {
                     graphic_count += 1;
                     gr_rect_count += 1;
+                    graphics.push(parse_graphic_summary(item, "gr_rect"));
                 }
                 Some("gr_circle") => {
                     graphic_count += 1;
                     gr_circle_count += 1;
+                    graphics.push(parse_graphic_summary(item, "gr_circle"));
                 }
                 Some("gr_arc") => {
                     graphic_count += 1;
                     gr_arc_count += 1;
+                    graphics.push(parse_graphic_summary(item, "gr_arc"));
                 }
                 Some("gr_poly") => {
                     graphic_count += 1;
                     gr_poly_count += 1;
+                    graphics.push(parse_graphic_summary(item, "gr_poly"));
                 }
                 Some("gr_curve") => {
                     graphic_count += 1;
                     gr_curve_count += 1;
+                    graphics.push(parse_graphic_summary(item, "gr_curve"));
                 }
                 Some("gr_text") => {
                     graphic_count += 1;
                     gr_text_count += 1;
+                    graphics.push(parse_graphic_summary(item, "gr_text"));
                 }
                 Some("gr_text_box") => {
                     graphic_count += 1;
                     gr_text_box_count += 1;
+                    graphics.push(parse_graphic_summary(item, "gr_text_box"));
                 }
-                Some(h) if h.starts_with("gr_") => graphic_count += 1,
+                Some(h) if h.starts_with("gr_") => {
+                    graphic_count += 1;
+                    graphics.push(parse_graphic_summary(item, h));
+                }
                 _ => {
                     if let Some(unknown) = UnknownNode::from_node(item) {
                         unknown_nodes.push(unknown);
@@ -465,6 +489,7 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
         dimensions,
         targets,
         groups,
+        graphics,
         layer_count,
         property_count,
         net_count,
@@ -858,6 +883,37 @@ fn parse_group_summary(node: &Node) -> PcbGroupSummary {
     }
 }
 
+fn parse_graphic_summary(node: &Node, token: &str) -> PcbGraphicSummary {
+    let mut layer = None;
+    let mut text = None;
+    let mut start = None;
+    let mut end = None;
+    let mut center = None;
+
+    if let Node::List { items, .. } = node {
+        // For gr_text / gr_text_box, second token may be the text content.
+        text = items.get(1).and_then(atom_as_string);
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("layer") => layer = second_atom_string(child),
+                Some("start") => start = parse_xy(child),
+                Some("end") => end = parse_xy(child),
+                Some("center") => center = parse_xy(child),
+                _ => {}
+            }
+        }
+    }
+
+    PcbGraphicSummary {
+        token: token.to_string(),
+        layer,
+        text,
+        start,
+        end,
+        center,
+    }
+}
+
 fn parse_property(node: &Node) -> Option<PcbProperty> {
     let Node::List { items, .. } = node else {
         return None;
@@ -1126,6 +1182,9 @@ mod tests {
         assert_eq!(doc.ast().footprints[0].lib_id.as_deref(), Some("R_0603"));
         assert_eq!(doc.ast().graphic_count, 1);
         assert_eq!(doc.ast().gr_line_count, 1);
+        assert_eq!(doc.ast().graphics.len(), 1);
+        assert_eq!(doc.ast().graphics[0].token, "gr_line");
+        assert_eq!(doc.ast().graphics[0].layer, None);
         assert_eq!(doc.ast().trace_segment_count, 1);
         assert_eq!(doc.ast().segments.len(), 1);
         assert_eq!(doc.ast().segments[0].layer.as_deref(), Some("F.Cu"));

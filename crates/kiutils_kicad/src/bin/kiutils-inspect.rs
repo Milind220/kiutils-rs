@@ -161,6 +161,7 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
         m.insert("parsed_dimension_entries".into(), json!(doc.ast().dimensions.len()));
         m.insert("parsed_target_entries".into(), json!(doc.ast().targets.len()));
         m.insert("parsed_group_entries".into(), json!(doc.ast().groups.len()));
+        m.insert("parsed_graphic_entries".into(), json!(doc.ast().graphics.len()));
         m.insert(
             "first_layer".into(),
             json!(doc.ast().layers.first().and_then(|l| l.name.clone())),
@@ -216,6 +217,14 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
         m.insert(
             "first_group_member_count".into(),
             json!(doc.ast().groups.first().map(|g| g.member_count)),
+        );
+        m.insert(
+            "first_graphic_token".into(),
+            json!(doc.ast().graphics.first().map(|g| g.token.clone())),
+        );
+        m.insert(
+            "first_graphic_layer".into(),
+            json!(doc.ast().graphics.first().and_then(|g| g.layer.clone())),
         );
         m.insert(
             "setup_has_stackup".into(),
@@ -283,6 +292,7 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
         println!("parsed_dimension_entries: {}", doc.ast().dimensions.len());
         println!("parsed_target_entries: {}", doc.ast().targets.len());
         println!("parsed_group_entries: {}", doc.ast().groups.len());
+        println!("parsed_graphic_entries: {}", doc.ast().graphics.len());
         println!(
             "first_layer: {:?}",
             doc.ast().layers.first().and_then(|l| l.name.clone())
@@ -347,6 +357,14 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
         println!(
             "first_group_member_count: {:?}",
             doc.ast().groups.first().map(|g| g.member_count)
+        );
+        println!(
+            "first_graphic_token: {:?}",
+            doc.ast().graphics.first().map(|g| g.token.clone())
+        );
+        println!(
+            "first_graphic_layer: {:?}",
+            doc.ast().graphics.first().and_then(|g| g.layer.clone())
         );
         println!(
             "setup_has_stackup: {:?}",

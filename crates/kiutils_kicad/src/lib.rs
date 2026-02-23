@@ -31,8 +31,8 @@ pub use lib_table::{FpLibTableAst, FpLibTableDocument, FpLibTableFile};
 pub use unknown::{UnknownField, UnknownNode};
 pub use pcb::{
     PcbArcSummary, PcbAst, PcbDocument, PcbFile, PcbFootprintSummary, PcbGeneratedSummary,
-    PcbGroupSummary, PcbLayer, PcbNet, PcbProperty, PcbSegmentSummary, PcbSetupSummary,
-    PcbTargetSummary, PcbViaSummary, PcbZoneSummary, PcbDimensionSummary,
+    PcbGraphicSummary, PcbGroupSummary, PcbLayer, PcbNet, PcbProperty, PcbSegmentSummary,
+    PcbSetupSummary, PcbTargetSummary, PcbViaSummary, PcbZoneSummary, PcbDimensionSummary,
 };
 pub use project::{ProjectAst, ProjectDocument, ProjectExtra, ProjectFile};
 pub use version::{KiCadSeries, VersionPolicy};
