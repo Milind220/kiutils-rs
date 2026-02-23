@@ -32,7 +32,49 @@ pub struct PcbFootprintSummary {
     pub value: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbSegmentSummary {
+    pub start: Option<[f64; 2]>,
+    pub end: Option<[f64; 2]>,
+    pub width: Option<f64>,
+    pub layer: Option<String>,
+    pub net: Option<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbArcSummary {
+    pub start: Option<[f64; 2]>,
+    pub mid: Option<[f64; 2]>,
+    pub end: Option<[f64; 2]>,
+    pub width: Option<f64>,
+    pub layer: Option<String>,
+    pub net: Option<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbViaSummary {
+    pub at: Option<[f64; 2]>,
+    pub size: Option<f64>,
+    pub drill: Option<f64>,
+    pub net: Option<i32>,
+    pub via_type: Option<String>,
+    pub layers: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbZoneSummary {
+    pub net: Option<i32>,
+    pub net_name: Option<String>,
+    pub name: Option<String>,
+    pub layer: Option<String>,
+    pub layers: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PcbAst {
     pub version: Option<i32>,
@@ -46,6 +88,10 @@ pub struct PcbAst {
     pub layers: Vec<PcbLayer>,
     pub nets: Vec<PcbNet>,
     pub footprints: Vec<PcbFootprintSummary>,
+    pub segments: Vec<PcbSegmentSummary>,
+    pub arcs: Vec<PcbArcSummary>,
+    pub vias: Vec<PcbViaSummary>,
+    pub zones: Vec<PcbZoneSummary>,
     pub layer_count: usize,
     pub property_count: usize,
     pub net_count: usize,
@@ -163,6 +209,10 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
     let mut layers = Vec::new();
     let mut nets = Vec::new();
     let mut footprints = Vec::new();
+    let mut segments = Vec::new();
+    let mut arcs = Vec::new();
+    let mut vias = Vec::new();
+    let mut zones = Vec::new();
     let mut layer_count = 0usize;
     let mut property_count = 0usize;
     let mut net_count = 0usize;
@@ -221,10 +271,22 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                     footprint_count += 1;
                     footprints.push(parse_footprint_summary(item));
                 }
-                Some("segment") => trace_segment_count += 1,
-                Some("arc") => trace_arc_count += 1,
-                Some("via") => via_count += 1,
-                Some("zone") => zone_count += 1,
+                Some("segment") => {
+                    trace_segment_count += 1;
+                    segments.push(parse_segment_summary(item));
+                }
+                Some("arc") => {
+                    trace_arc_count += 1;
+                    arcs.push(parse_arc_summary(item));
+                }
+                Some("via") => {
+                    via_count += 1;
+                    vias.push(parse_via_summary(item));
+                }
+                Some("zone") => {
+                    zone_count += 1;
+                    zones.push(parse_zone_summary(item));
+                }
                 Some("dimension") => dimension_count += 1,
                 Some("target") => target_count += 1,
                 Some("group") => group_count += 1,
@@ -283,6 +345,10 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
         layers,
         nets,
         footprints,
+        segments,
+        arcs,
+        vias,
+        zones,
         layer_count,
         property_count,
         net_count,
@@ -418,6 +484,135 @@ fn parse_footprint_summary(node: &Node) -> PcbFootprintSummary {
     }
 }
 
+fn parse_segment_summary(node: &Node) -> PcbSegmentSummary {
+    let mut start = None;
+    let mut end = None;
+    let mut width = None;
+    let mut layer = None;
+    let mut net = None;
+    if let Node::List { items, .. } = node {
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("start") => start = parse_xy(child),
+                Some("end") => end = parse_xy(child),
+                Some("width") => width = second_atom_f64(child),
+                Some("layer") => layer = second_atom_string(child),
+                Some("net") => net = second_atom_i32(child),
+                _ => {}
+            }
+        }
+    }
+    PcbSegmentSummary {
+        start,
+        end,
+        width,
+        layer,
+        net,
+    }
+}
+
+fn parse_arc_summary(node: &Node) -> PcbArcSummary {
+    let mut start = None;
+    let mut mid = None;
+    let mut end = None;
+    let mut width = None;
+    let mut layer = None;
+    let mut net = None;
+    if let Node::List { items, .. } = node {
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("start") => start = parse_xy(child),
+                Some("mid") => mid = parse_xy(child),
+                Some("end") => end = parse_xy(child),
+                Some("width") => width = second_atom_f64(child),
+                Some("layer") => layer = second_atom_string(child),
+                Some("net") => net = second_atom_i32(child),
+                _ => {}
+            }
+        }
+    }
+    PcbArcSummary {
+        start,
+        mid,
+        end,
+        width,
+        layer,
+        net,
+    }
+}
+
+fn parse_via_summary(node: &Node) -> PcbViaSummary {
+    let mut at = None;
+    let mut size = None;
+    let mut drill = None;
+    let mut net = None;
+    let mut via_type = None;
+    let mut layers = Vec::new();
+    if let Node::List { items, .. } = node {
+        // Some formats encode via type as second symbol: (via blind ...)
+        via_type = items.get(1).and_then(|n| match n {
+            Node::Atom {
+                atom: Atom::Symbol(s),
+                ..
+            } if matches!(s.as_str(), "blind" | "micro" | "through") => Some(s.clone()),
+            _ => None,
+        });
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("at") => at = parse_xy(child),
+                Some("size") => size = second_atom_f64(child),
+                Some("drill") => drill = second_atom_f64(child),
+                Some("net") => net = second_atom_i32(child),
+                Some("layers") => {
+                    if let Node::List { items: inner, .. } = child {
+                        layers = inner.iter().skip(1).filter_map(atom_as_string).collect();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    PcbViaSummary {
+        at,
+        size,
+        drill,
+        net,
+        via_type,
+        layers,
+    }
+}
+
+fn parse_zone_summary(node: &Node) -> PcbZoneSummary {
+    let mut net = None;
+    let mut net_name = None;
+    let mut name = None;
+    let mut layer = None;
+    let mut layers = Vec::new();
+    if let Node::List { items, .. } = node {
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("net") => net = second_atom_i32(child),
+                Some("net_name") => net_name = second_atom_string(child),
+                Some("name") => name = second_atom_string(child),
+                Some("layer") => layer = second_atom_string(child),
+                Some("layers") => {
+                    if let Node::List { items: inner, .. } = child {
+                        layers = inner.iter().skip(1).filter_map(atom_as_string).collect();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    PcbZoneSummary {
+        net,
+        net_name,
+        name,
+        layer,
+        layers,
+    }
+}
+
 fn atom_as_string(node: &Node) -> Option<String> {
     match node {
         Node::Atom {
@@ -434,6 +629,23 @@ fn atom_as_string(node: &Node) -> Option<String> {
 
 fn atom_as_i32(node: &Node) -> Option<i32> {
     atom_as_string(node).and_then(|s| s.parse::<i32>().ok())
+}
+
+fn second_atom_i32(node: &Node) -> Option<i32> {
+    second_atom_string(node).and_then(|s| s.parse::<i32>().ok())
+}
+
+fn second_atom_f64(node: &Node) -> Option<f64> {
+    second_atom_string(node).and_then(|s| s.parse::<f64>().ok())
+}
+
+fn parse_xy(node: &Node) -> Option<[f64; 2]> {
+    let Node::List { items, .. } = node else {
+        return None;
+    };
+    let x = items.get(1).and_then(atom_as_string)?.parse::<f64>().ok()?;
+    let y = items.get(2).and_then(atom_as_string)?.parse::<f64>().ok()?;
+    Some([x, y])
 }
 
 fn validate_version(version: Option<i32>) -> Result<Vec<Diagnostic>, Error> {
@@ -577,7 +789,7 @@ mod tests {
     #[test]
     fn parses_top_level_counts() {
         let path = tmp_file("pcb_counts");
-        let src = "(kicad_pcb (version 20260101) (generator pcbnew)\n  (layers (0 F.Cu signal) (31 B.Cu signal))\n  (setup)\n  (net 0 \"\")\n  (footprint \"R_0603\")\n  (gr_line (start 0 0) (end 1 1))\n  (segment (start 0 0) (end 1 1))\n  (via (at 0 0) (size 1) (drill 0.5) (layers F.Cu B.Cu))\n  (zone)\n)\n";
+        let src = "(kicad_pcb (version 20260101) (generator pcbnew)\n  (layers (0 F.Cu signal) (31 B.Cu signal))\n  (setup)\n  (net 0 \"\")\n  (footprint \"R_0603\")\n  (gr_line (start 0 0) (end 1 1))\n  (segment (start 0 0) (end 1 1) (width 0.25) (layer F.Cu) (net 0))\n  (via (at 0 0) (size 1) (drill 0.5) (layers F.Cu B.Cu))\n  (zone)\n)\n";
         fs::write(&path, src).expect("write fixture");
 
         let doc = PcbFile::read(&path).expect("read");
@@ -593,8 +805,13 @@ mod tests {
         assert_eq!(doc.ast().graphic_count, 1);
         assert_eq!(doc.ast().gr_line_count, 1);
         assert_eq!(doc.ast().trace_segment_count, 1);
+        assert_eq!(doc.ast().segments.len(), 1);
+        assert_eq!(doc.ast().segments[0].layer.as_deref(), Some("F.Cu"));
         assert_eq!(doc.ast().via_count, 1);
+        assert_eq!(doc.ast().vias.len(), 1);
+        assert_eq!(doc.ast().vias[0].layers.len(), 2);
         assert_eq!(doc.ast().zone_count, 1);
+        assert_eq!(doc.ast().zones.len(), 1);
         assert!(doc.ast().has_setup);
         assert!(doc.ast().unknown_nodes.is_empty());
 

@@ -151,10 +151,16 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
                 "parsed_layer_entries": doc.ast().layers.len(),
                 "parsed_net_entries": doc.ast().nets.len(),
                 "parsed_footprint_entries": doc.ast().footprints.len(),
+                "parsed_segment_entries": doc.ast().segments.len(),
+                "parsed_arc_entries": doc.ast().arcs.len(),
+                "parsed_via_entries": doc.ast().vias.len(),
+                "parsed_zone_entries": doc.ast().zones.len(),
                 "first_layer": doc.ast().layers.first().and_then(|l| l.name.clone()),
                 "first_net": doc.ast().nets.first().and_then(|n| n.name.clone()),
                 "first_footprint_lib_id": doc.ast().footprints.first().and_then(|f| f.lib_id.clone()),
                 "first_footprint_ref": doc.ast().footprints.first().and_then(|f| f.reference.clone()),
+                "first_segment_layer": doc.ast().segments.first().and_then(|s| s.layer.clone()),
+                "first_zone_net_name": doc.ast().zones.first().and_then(|z| z.net_name.clone()),
                 "layer_count": doc.ast().layer_count,
                 "property_count": doc.ast().property_count,
                 "net_count": doc.ast().net_count,
@@ -189,6 +195,10 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
         println!("parsed_layer_entries: {}", doc.ast().layers.len());
         println!("parsed_net_entries: {}", doc.ast().nets.len());
         println!("parsed_footprint_entries: {}", doc.ast().footprints.len());
+        println!("parsed_segment_entries: {}", doc.ast().segments.len());
+        println!("parsed_arc_entries: {}", doc.ast().arcs.len());
+        println!("parsed_via_entries: {}", doc.ast().vias.len());
+        println!("parsed_zone_entries: {}", doc.ast().zones.len());
         println!(
             "first_layer: {:?}",
             doc.ast().layers.first().and_then(|l| l.name.clone())
@@ -204,6 +214,14 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
         println!(
             "first_footprint_ref: {:?}",
             doc.ast().footprints.first().and_then(|f| f.reference.clone())
+        );
+        println!(
+            "first_segment_layer: {:?}",
+            doc.ast().segments.first().and_then(|s| s.layer.clone())
+        );
+        println!(
+            "first_zone_net_name: {:?}",
+            doc.ast().zones.first().and_then(|z| z.net_name.clone())
         );
         println!("layer_count: {}", doc.ast().layer_count);
         println!("property_count: {}", doc.ast().property_count);

@@ -29,7 +29,10 @@ pub use error::Error;
 pub use footprint::{FootprintAst, FootprintDocument, FootprintFile};
 pub use lib_table::{FpLibTableAst, FpLibTableDocument, FpLibTableFile};
 pub use unknown::{UnknownField, UnknownNode};
-pub use pcb::{PcbAst, PcbDocument, PcbFile, PcbFootprintSummary, PcbLayer, PcbNet};
+pub use pcb::{
+    PcbArcSummary, PcbAst, PcbDocument, PcbFile, PcbFootprintSummary, PcbLayer, PcbNet,
+    PcbSegmentSummary, PcbViaSummary, PcbZoneSummary,
+};
 pub use project::{ProjectAst, ProjectDocument, ProjectExtra, ProjectFile};
 pub use version::{KiCadSeries, VersionPolicy};
 pub use write_mode::WriteMode;
