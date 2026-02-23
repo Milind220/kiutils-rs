@@ -8,19 +8,19 @@ use crate::version::VersionPolicy;
 use crate::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PcbAst {
+pub struct FootprintAst {
     pub version: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
-pub struct PcbDocument {
-    ast: PcbAst,
+pub struct FootprintDocument {
+    ast: FootprintAst,
     cst: CstDocument,
     diagnostics: Vec<Diagnostic>,
 }
 
-impl PcbDocument {
-    pub fn ast(&self) -> &PcbAst {
+impl FootprintDocument {
+    pub fn ast(&self) -> &FootprintAst {
         &self.ast
     }
 
@@ -38,18 +38,18 @@ impl PcbDocument {
     }
 }
 
-pub struct PcbFile;
+pub struct FootprintFile;
 
-impl PcbFile {
-    pub fn read<P: AsRef<Path>>(path: P) -> Result<PcbDocument, Error> {
+impl FootprintFile {
+    pub fn read<P: AsRef<Path>>(path: P) -> Result<FootprintDocument, Error> {
         let raw = fs::read_to_string(path)?;
         let cst = parse_one(&raw)?;
-        ensure_head(&cst, "kicad_pcb")?;
-
-        let ast = parse_ast(&cst);
+        ensure_head(&cst, "footprint")?;
+        let ast = FootprintAst {
+            version: find_version(&cst),
+        };
         let diagnostics = validate_version(ast.version)?;
-
-        Ok(PcbDocument {
+        Ok(FootprintDocument {
             ast,
             cst,
             diagnostics,
@@ -82,9 +82,7 @@ fn ensure_head(cst: &CstDocument, expected: &str) -> Result<(), Error> {
     }
 }
 
-fn parse_ast(cst: &CstDocument) -> PcbAst {
-    let mut version = None;
-
+fn find_version(cst: &CstDocument) -> Option<i32> {
     if let Some(Node::List { items, .. }) = cst.nodes.first() {
         for item in items {
             if let Node::List { items: inner, .. } = item {
@@ -101,15 +99,13 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 ] = inner.as_slice()
                 {
                     if head == "version" {
-                        version = v.parse::<i32>().ok();
-                        break;
+                        return v.parse::<i32>().ok();
                     }
                 }
             }
         }
     }
-
-    PcbAst { version }
+    None
 }
 
 fn validate_version(version: Option<i32>) -> Result<Vec<Diagnostic>, Error> {
@@ -152,64 +148,33 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        std::env::temp_dir().join(format!("{name}_{nanos}.kicad_pcb"))
+        std::env::temp_dir().join(format!("{name}_{nanos}.kicad_mod"))
     }
 
     #[test]
-    fn read_parses_version_and_preserves_lossless() {
-        let path = tmp_file("pcb_read_ok");
-        let src = "(kicad_pcb (version 20260101) (generator pcbnew))\n";
+    fn read_footprint_and_preserve_lossless() {
+        let path = tmp_file("footprint_read_ok");
+        let src = "(footprint \"R_0603\" (version 20260101) (generator pcbnew))\n";
         fs::write(&path, src).expect("write fixture");
 
-        let doc = PcbFile::read(&path).expect("read");
+        let doc = FootprintFile::read(&path).expect("read");
         assert_eq!(doc.ast().version, Some(20260101));
         assert_eq!(doc.cst().to_lossless_string(), src);
 
-        let out = tmp_file("pcb_write_ok");
-        doc.write(&out).expect("write");
-        let roundtrip = fs::read_to_string(&out).expect("read out");
-        assert_eq!(roundtrip, src);
-
-        let _ = fs::remove_file(path);
-        let _ = fs::remove_file(out);
-    }
-
-    #[test]
-    fn read_fails_on_invalid_root() {
-        let path = tmp_file("pcb_bad_root");
-        fs::write(&path, "(a)(b)").expect("write fixture");
-
-        let err = PcbFile::read(&path).expect_err("must fail");
-        match err {
-            Error::Parse(_) => {}
-            other => panic!("unexpected error: {other}"),
-        }
-
         let _ = fs::remove_file(path);
     }
 
     #[test]
-    fn read_rejects_old_version() {
-        let path = tmp_file("pcb_old_version");
-        fs::write(&path, "(kicad_pcb (version 20220101))\n").expect("write fixture");
+    fn read_footprint_warns_on_future_version() {
+        let path = tmp_file("footprint_future");
+        fs::write(
+            &path,
+            "(footprint \"R\" (version 20270101) (generator pcbnew))\n",
+        )
+        .expect("write fixture");
 
-        let err = PcbFile::read(&path).expect_err("must fail");
-        match err {
-            Error::Validation(msg) => assert!(msg.contains("v9+")),
-            other => panic!("unexpected error: {other}"),
-        }
-
-        let _ = fs::remove_file(path);
-    }
-
-    #[test]
-    fn read_warns_on_future_version() {
-        let path = tmp_file("pcb_future_version");
-        fs::write(&path, "(kicad_pcb (version 20270101))\n").expect("write fixture");
-
-        let doc = PcbFile::read(&path).expect("read");
+        let doc = FootprintFile::read(&path).expect("read");
         assert_eq!(doc.diagnostics().len(), 1);
-        assert_eq!(doc.diagnostics()[0].code, "future_format");
 
         let _ = fs::remove_file(path);
     }

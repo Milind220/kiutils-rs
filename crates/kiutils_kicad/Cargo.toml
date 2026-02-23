@@ -9,4 +9,5 @@ description = "KiCad typed AST and file codecs built on kiutils_sexpr"
 
 [dependencies]
 thiserror.workspace = true
+serde_json.workspace = true
 kiutils_sexpr = { path = "../kiutils_sexpr" }
