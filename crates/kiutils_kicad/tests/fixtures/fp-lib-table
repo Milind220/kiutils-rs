@@ -1,0 +1,4 @@
+(fp_lib_table
+  (lib (name "A") (type "KiCad") (uri "${KIPRJMOD}/A.pretty") (options "") (descr "A"))
+  (x_future_libtable setting)
+)

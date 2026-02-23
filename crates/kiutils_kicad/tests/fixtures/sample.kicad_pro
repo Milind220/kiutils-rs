@@ -1,0 +1,5 @@
+{
+  "meta": { "version": 3 },
+  "libraries": { "pinned_footprint_libs": ["A"] },
+  "x_future_pro": { "enabled": true }
+}

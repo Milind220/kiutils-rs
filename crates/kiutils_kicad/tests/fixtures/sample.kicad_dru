@@ -1,0 +1,3 @@
+(version 1)
+(rule "base" (constraint clearance (min "0.1mm")) (condition "A"))
+(x_future_dru yes)
