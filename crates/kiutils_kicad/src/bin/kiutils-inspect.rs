@@ -561,6 +561,7 @@ fn inspect_fplib(opts: &Opts) -> Result<(), String> {
             json!({
                 "kind": "fplib",
                 "path": opts.path,
+                "version": doc.ast().version,
                 "library_count": doc.ast().library_count,
                 "unknown_count": doc.ast().unknown_nodes.len(),
             })
@@ -568,6 +569,7 @@ fn inspect_fplib(opts: &Opts) -> Result<(), String> {
     } else {
         println!("kind: fplib");
         println!("path: {}", opts.path.display());
+        println!("version: {:?}", doc.ast().version);
         println!("library_count: {}", doc.ast().library_count);
         println!("unknown_count: {}", doc.ast().unknown_nodes.len());
     }
