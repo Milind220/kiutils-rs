@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use kiutils_sexpr::{parse_one, Atom, CstDocument, Node};
+use kiutils_sexpr::{parse_one, Atom, CstDocument, Node, Span};
 
 use crate::diagnostic::{Diagnostic, Severity};
 use crate::sexpr_utils::{atom_as_i32, atom_as_string, head_of, second_atom_i32, second_atom_string};
@@ -273,6 +273,102 @@ impl PcbDocument {
         &mut self.ast
     }
 
+    pub fn set_version(&mut self, version: i32) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_top_level_scalar(items, "version", atom_symbol(version.to_string()))
+        })
+    }
+
+    pub fn set_generator<S: Into<String>>(&mut self, generator: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_top_level_scalar(items, "generator", atom_symbol(generator.into()))
+        })
+    }
+
+    pub fn set_generator_version<S: Into<String>>(&mut self, generator_version: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_top_level_scalar(
+                items,
+                "generator_version",
+                atom_quoted(generator_version.into()),
+            )
+        })
+    }
+
+    pub fn set_paper_standard<S: Into<String>>(
+        &mut self,
+        kind: S,
+        orientation: Option<&str>,
+    ) -> &mut Self {
+        let mut nodes = vec![atom_symbol("paper".to_string()), atom_quoted(kind.into())];
+        if let Some(orientation) = orientation {
+            nodes.push(atom_symbol(orientation.to_string()));
+        }
+        self.mutate_root_items(|items| upsert_top_level_node(items, "paper", list_node(nodes)))
+    }
+
+    pub fn set_paper_user(
+        &mut self,
+        width: f64,
+        height: f64,
+        orientation: Option<&str>,
+    ) -> &mut Self {
+        let mut nodes = vec![
+            atom_symbol("paper".to_string()),
+            atom_quoted("User".to_string()),
+            atom_symbol(width.to_string()),
+            atom_symbol(height.to_string()),
+        ];
+        if let Some(orientation) = orientation {
+            nodes.push(atom_symbol(orientation.to_string()));
+        }
+        self.mutate_root_items(|items| upsert_top_level_node(items, "paper", list_node(nodes)))
+    }
+
+    pub fn set_title<S: Into<String>>(&mut self, title: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_title_block_scalar(items, "title", atom_quoted(title.into()))
+        })
+    }
+
+    pub fn set_date<S: Into<String>>(&mut self, date: S) -> &mut Self {
+        self.mutate_root_items(|items| upsert_title_block_scalar(items, "date", atom_quoted(date.into())))
+    }
+
+    pub fn set_revision<S: Into<String>>(&mut self, revision: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_title_block_scalar(items, "rev", atom_quoted(revision.into()))
+        })
+    }
+
+    pub fn set_company<S: Into<String>>(&mut self, company: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_title_block_scalar(items, "company", atom_quoted(company.into()))
+        })
+    }
+
+    pub fn upsert_property<K: Into<String>, V: Into<String>>(
+        &mut self,
+        key: K,
+        value: V,
+    ) -> &mut Self {
+        let key = key.into();
+        let value = value.into();
+        self.mutate_root_items(|items| upsert_property(items, &key, &value))
+    }
+
+    pub fn remove_property(&mut self, key: &str) -> &mut Self {
+        let key = key.to_string();
+        self.mutate_root_items(|items| {
+            if let Some(idx) = find_property_index(items, &key) {
+                items.remove(idx);
+                true
+            } else {
+                false
+            }
+        })
+    }
+
     pub fn cst(&self) -> &CstDocument {
         &self.cst
     }
@@ -292,6 +388,28 @@ impl PcbDocument {
         }
         Ok(())
     }
+
+    fn mutate_root_items<F>(&mut self, mutate: F) -> &mut Self
+    where
+        F: FnOnce(&mut Vec<Node>) -> bool,
+    {
+        let changed = root_items_mut(&mut self.cst).map(mutate).unwrap_or(false);
+        if changed {
+            self.refresh_from_cst();
+        }
+        self
+    }
+
+    fn refresh_from_cst(&mut self) {
+        let canonical = self.cst.to_canonical_string();
+        if let Ok(cst) = parse_one(&canonical) {
+            self.cst = cst;
+        } else {
+            self.cst.raw = canonical;
+        }
+        self.ast = parse_ast(&self.cst);
+        self.diagnostics = collect_diagnostics(self.ast.version);
+    }
 }
 
 pub struct PcbFile;
@@ -303,13 +421,172 @@ impl PcbFile {
         ensure_head(&cst, "kicad_pcb")?;
 
         let ast = parse_ast(&cst);
-        let diagnostics = validate_version(ast.version)?;
+        let diagnostics = collect_diagnostics(ast.version);
 
         Ok(PcbDocument {
             ast,
             cst,
             diagnostics,
         })
+    }
+}
+
+fn root_items_mut(cst: &mut CstDocument) -> Option<&mut Vec<Node>> {
+    match cst.nodes.first_mut() {
+        Some(Node::List { items, .. }) => Some(items),
+        _ => None,
+    }
+}
+
+fn collect_diagnostics(version: Option<i32>) -> Vec<Diagnostic> {
+    validate_version(version).unwrap_or_default()
+}
+
+fn span_zero() -> Span {
+    Span { start: 0, end: 0 }
+}
+
+fn atom_symbol(value: String) -> Node {
+    Node::Atom {
+        atom: Atom::Symbol(value),
+        span: span_zero(),
+    }
+}
+
+fn atom_quoted(value: String) -> Node {
+    Node::Atom {
+        atom: Atom::Quoted(value),
+        span: span_zero(),
+    }
+}
+
+fn list_node(items: Vec<Node>) -> Node {
+    Node::List {
+        items,
+        span: span_zero(),
+    }
+}
+
+fn top_level_child_index(items: &[Node], head: &str) -> Option<usize> {
+    items
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find(|(_, node)| head_of(node) == Some(head))
+        .map(|(idx, _)| idx)
+}
+
+fn upsert_top_level_node(items: &mut Vec<Node>, head: &str, node: Node) -> bool {
+    if let Some(idx) = top_level_child_index(items, head) {
+        if items[idx] == node {
+            false
+        } else {
+            items[idx] = node;
+            true
+        }
+    } else {
+        items.push(node);
+        true
+    }
+}
+
+fn upsert_top_level_scalar(items: &mut Vec<Node>, head: &str, value: Node) -> bool {
+    upsert_top_level_node(
+        items,
+        head,
+        list_node(vec![atom_symbol(head.to_string()), value]),
+    )
+}
+
+fn upsert_child_scalar(items: &mut Vec<Node>, head: &str, value: Node) -> bool {
+    let replacement = list_node(vec![atom_symbol(head.to_string()), value]);
+    let existing = items
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find(|(_, node)| head_of(node) == Some(head))
+        .map(|(idx, _)| idx);
+    if let Some(idx) = existing {
+        if items[idx] == replacement {
+            false
+        } else {
+            items[idx] = replacement;
+            true
+        }
+    } else {
+        items.push(replacement);
+        true
+    }
+}
+
+fn upsert_title_block_scalar(items: &mut Vec<Node>, head: &str, value: Node) -> bool {
+    let tb_idx = if let Some(idx) = top_level_child_index(items, "title_block") {
+        idx
+    } else {
+        items.push(list_node(vec![atom_symbol("title_block".to_string())]));
+        items.len() - 1
+    };
+
+    let Some(Node::List { items: title_items, .. }) = items.get_mut(tb_idx) else {
+        return false;
+    };
+    upsert_child_scalar(title_items, head, value)
+}
+
+fn property_node(key: &str, value: &str) -> Node {
+    list_node(vec![
+        atom_symbol("property".to_string()),
+        atom_quoted(key.to_string()),
+        atom_quoted(value.to_string()),
+    ])
+}
+
+fn find_property_index(items: &[Node], key: &str) -> Option<usize> {
+    items
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find(|(_, node)| {
+            if head_of(node) != Some("property") {
+                return false;
+            }
+            match node {
+                Node::List { items: prop_items, .. } => {
+                    prop_items.get(1).and_then(atom_as_string).as_deref() == Some(key)
+                }
+                _ => false,
+            }
+        })
+        .map(|(idx, _)| idx)
+}
+
+fn upsert_property(items: &mut Vec<Node>, key: &str, value: &str) -> bool {
+    if let Some(idx) = find_property_index(items, key) {
+        match items.get_mut(idx) {
+            Some(Node::List { items: prop_items, .. }) => {
+                if prop_items.len() > 2 {
+                    let replacement = atom_quoted(value.to_string());
+                    if prop_items[2] == replacement {
+                        false
+                    } else {
+                        prop_items[2] = replacement;
+                        true
+                    }
+                } else {
+                    let replacement = property_node(key, value);
+                    if items[idx] == replacement {
+                        false
+                    } else {
+                        items[idx] = replacement;
+                        true
+                    }
+                }
+            }
+            _ => false,
+        }
+    } else {
+        items.push(property_node(key, value));
+        true
     }
 }
 
@@ -1600,5 +1877,101 @@ mod tests {
         );
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn edit_roundtrip_updates_core_fields_and_preserves_unknowns() {
+        let path = tmp_file("pcb_edit_roundtrip");
+        let src = "(kicad_pcb (version 20241229) (generator pcbnew)\n  (paper \"A4\")\n  (title_block (title \"Old\") (date \"2025-01-01\") (rev \"A\") (company \"OldCo\"))\n  (property \"Owner\" \"Milind\")\n  (future_token 1 2)\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.set_version(20260101)
+            .set_generator("kiutils")
+            .set_generator_version("dev")
+            .set_paper_standard("A3", Some("portrait"))
+            .set_title("Roundtrip Demo")
+            .set_date("2026-02-25")
+            .set_revision("B")
+            .set_company("Lords")
+            .upsert_property("Owner", "Milind Sharma")
+            .upsert_property("Build", "2")
+            .remove_property("DoesNotExist");
+
+        let out = tmp_file("pcb_edit_roundtrip_out");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert!(written.contains("(future_token 1 2)"));
+
+        let reread = PcbFile::read(&out).expect("reread");
+        assert_eq!(reread.ast().version, Some(20260101));
+        assert_eq!(reread.ast().generator.as_deref(), Some("kiutils"));
+        assert_eq!(reread.ast().generator_version.as_deref(), Some("dev"));
+        assert_eq!(
+            reread.ast().paper.as_ref().and_then(|p| p.kind.clone()),
+            Some("A3".to_string())
+        );
+        assert_eq!(
+            reread.ast().paper.as_ref().and_then(|p| p.orientation.clone()),
+            Some("portrait".to_string())
+        );
+        assert_eq!(
+            reread
+                .ast()
+                .title_block
+                .as_ref()
+                .and_then(|t| t.title.clone()),
+            Some("Roundtrip Demo".to_string())
+        );
+        assert_eq!(reread.ast().property_count, 2);
+        assert_eq!(reread.ast().unknown_nodes.len(), 1);
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
+    fn edit_roundtrip_updates_user_paper_dimensions() {
+        let path = tmp_file("pcb_edit_paper_user");
+        let src = "(kicad_pcb (version 20260101) (generator pcbnew) (paper A4))\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.set_paper_user(100.0, 80.0, Some("landscape"));
+
+        let out = tmp_file("pcb_edit_paper_user_out");
+        doc.write(&out).expect("write");
+        let reread = PcbFile::read(&out).expect("reread");
+        assert_eq!(
+            reread.ast().paper.as_ref().and_then(|p| p.kind.clone()),
+            Some("User".to_string())
+        );
+        assert_eq!(reread.ast().paper.as_ref().and_then(|p| p.width), Some(100.0));
+        assert_eq!(reread.ast().paper.as_ref().and_then(|p| p.height), Some(80.0));
+        assert_eq!(
+            reread.ast().paper.as_ref().and_then(|p| p.orientation.clone()),
+            Some("landscape".to_string())
+        );
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
+    fn upsert_property_preserves_existing_extra_children() {
+        let path = tmp_file("pcb_property_preserve_extra");
+        let src = "(kicad_pcb (version 20260101) (generator pcbnew)\n  (property \"Owner\" \"Old\" (at 1 2 0))\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.upsert_property("Owner", "New");
+
+        let out = tmp_file("pcb_property_preserve_extra_out");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert!(written.contains("(property \"Owner\" \"New\" (at 1 2 0))"));
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
     }
 }
