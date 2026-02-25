@@ -586,6 +586,7 @@ fn footprint_fields(doc: &kiutils_kicad::FootprintDocument) -> Vec<InspectField>
     vec![
         field("lib_id", json!(ast.lib_id), format!("{:?}", ast.lib_id)),
         field("version", json!(ast.version), format!("{:?}", ast.version)),
+        field("tedit", json!(ast.tedit), format!("{:?}", ast.tedit)),
         field("generator", json!(ast.generator), format!("{:?}", ast.generator)),
         field(
             "generator_version",
@@ -660,6 +661,11 @@ fn footprint_fields(doc: &kiutils_kicad::FootprintDocument) -> Vec<InspectField>
         field("model_count", json!(ast.model_count), ast.model_count.to_string()),
         field("zone_count", json!(ast.zone_count), ast.zone_count.to_string()),
         field("group_count", json!(ast.group_count), ast.group_count.to_string()),
+        field(
+            "dimension_count",
+            json!(ast.dimension_count),
+            ast.dimension_count.to_string(),
+        ),
         field(
             "graphic_count",
             json!(ast.graphic_count),

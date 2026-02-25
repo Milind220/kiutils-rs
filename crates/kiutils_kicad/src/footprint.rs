@@ -15,6 +15,7 @@ use crate::{Error, UnknownNode, WriteMode};
 pub struct FootprintAst {
     pub lib_id: Option<String>,
     pub version: Option<i32>,
+    pub tedit: Option<String>,
     pub generator: Option<String>,
     pub generator_version: Option<String>,
     pub layer: Option<String>,
@@ -45,6 +46,7 @@ pub struct FootprintAst {
     pub fp_curve_count: usize,
     pub fp_text_count: usize,
     pub fp_text_box_count: usize,
+    pub dimension_count: usize,
     pub graphic_count: usize,
     pub unknown_nodes: Vec<UnknownNode>,
 }
@@ -92,9 +94,22 @@ impl FootprintFile {
     pub fn read<P: AsRef<Path>>(path: P) -> Result<FootprintDocument, Error> {
         let raw = fs::read_to_string(path)?;
         let cst = parse_one(&raw)?;
-        ensure_head(&cst, "footprint")?;
+        let legacy_module_root = ensure_head(&cst)?;
         let ast = parse_ast(&cst);
-        let diagnostics = validate_version(ast.version)?;
+        let mut diagnostics = validate_version(ast.version)?;
+        if legacy_module_root {
+            diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                code: "legacy_root",
+                message:
+                    "legacy root token `module` detected; parsing in compatibility mode"
+                        .to_string(),
+                span: None,
+                hint: Some(
+                    "save from newer KiCad to normalize root token to `footprint`".to_string(),
+                ),
+            });
+        }
         Ok(FootprintDocument {
             ast,
             cst,
@@ -103,7 +118,7 @@ impl FootprintFile {
     }
 }
 
-fn ensure_head(cst: &CstDocument, expected: &str) -> Result<(), Error> {
+fn ensure_head(cst: &CstDocument) -> Result<bool, Error> {
     let head = cst
         .nodes
         .first()
@@ -120,9 +135,10 @@ fn ensure_head(cst: &CstDocument, expected: &str) -> Result<(), Error> {
         });
 
     match head {
-        Some(h) if h == expected => Ok(()),
+        Some("footprint") => Ok(false),
+        Some("module") => Ok(true),
         Some(h) => Err(Error::Validation(format!(
-            "expected root token `{expected}`, got `{h}`"
+            "expected root token `footprint` or legacy `module`, got `{h}`"
         ))),
         None => Err(Error::Validation("missing root token".to_string())),
     }
@@ -131,6 +147,7 @@ fn ensure_head(cst: &CstDocument, expected: &str) -> Result<(), Error> {
 fn parse_ast(cst: &CstDocument) -> FootprintAst {
     let mut lib_id = None;
     let mut version = None;
+    let mut tedit = None;
     let mut generator = None;
     let mut generator_version = None;
     let mut layer = None;
@@ -161,6 +178,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
     let mut fp_curve_count = 0usize;
     let mut fp_text_count = 0usize;
     let mut fp_text_box_count = 0usize;
+    let mut dimension_count = 0usize;
     let mut graphic_count = 0usize;
     let mut unknown_nodes = Vec::new();
 
@@ -169,6 +187,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
         for item in items.iter().skip(2) {
             match head_of(item) {
                 Some("version") => version = second_atom_i32(item),
+                Some("tedit") => tedit = second_atom_string(item),
                 Some("generator") => generator = second_atom_string(item),
                 Some("generator_version") => generator_version = second_atom_string(item),
                 Some("layer") => layer = second_atom_string(item),
@@ -235,6 +254,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
                     fp_text_box_count += 1;
                     graphic_count += 1;
                 }
+                Some("dimension") => dimension_count += 1,
                 _ => {
                     if let Some(unknown) = UnknownNode::from_node(item) {
                         unknown_nodes.push(unknown);
@@ -247,6 +267,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
     FootprintAst {
         lib_id,
         version,
+        tedit,
         generator,
         generator_version,
         layer,
@@ -277,6 +298,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
         fp_curve_count,
         fp_text_count,
         fp_text_box_count,
+        dimension_count,
         graphic_count,
         unknown_nodes,
     }
@@ -288,9 +310,17 @@ fn validate_version(version: Option<i32>) -> Result<Vec<Diagnostic>, Error> {
 
     if let Some(v) = version {
         if policy.reject_older && !policy.accepts(v) {
-            return Err(Error::Validation(format!(
-                "unsupported KiCad version {v}; expected v9+ format"
-            )));
+            diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                code: "legacy_format",
+                message: format!(
+                    "version {v} is older than v9 target; parsing in compatibility mode"
+                ),
+                span: None,
+                hint: Some(
+                    "parser support for pre-v9 token variants is best-effort".to_string(),
+                ),
+            });
         }
 
         if policy.is_future_for_target(v) {
@@ -357,6 +387,38 @@ mod tests {
     }
 
     #[test]
+    fn read_footprint_warns_on_legacy_version() {
+        let path = tmp_file("footprint_legacy");
+        fs::write(
+            &path,
+            "(footprint \"R\" (version 20221018) (generator pcbnew))\n",
+        )
+        .expect("write fixture");
+
+        let doc = FootprintFile::read(&path).expect("read");
+        assert_eq!(doc.diagnostics().len(), 1);
+        assert_eq!(doc.diagnostics()[0].code, "legacy_format");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn read_footprint_accepts_legacy_module_root() {
+        let path = tmp_file("footprint_module_root");
+        let src = "(module R_0603 (layer F.Cu) (tedit 5F0C7995) (attr smd))\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let doc = FootprintFile::read(&path).expect("read");
+        assert_eq!(doc.ast().lib_id.as_deref(), Some("R_0603"));
+        assert_eq!(doc.ast().tedit.as_deref(), Some("5F0C7995"));
+        assert!(doc.ast().attr_present);
+        assert_eq!(doc.diagnostics().len(), 1);
+        assert_eq!(doc.diagnostics()[0].code, "legacy_root");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn read_footprint_captures_unknown_nodes() {
         let path = tmp_file("footprint_unknown");
         let src =
@@ -373,7 +435,7 @@ mod tests {
     #[test]
     fn read_footprint_parses_top_level_counts() {
         let path = tmp_file("footprint_counts");
-        let src = "(footprint \"X\" (version 20260101) (generator pcbnew) (generator_version \"10.0\") (layer \"F.Cu\")\n  (descr \"demo\")\n  (tags \"a b\")\n  (property \"Reference\" \"R?\")\n  (property \"Value\" \"X\")\n  (attr smd)\n  (private_layers \"In1.Cu\")\n  (net_tie_pad_groups \"1,2\")\n  (solder_mask_margin 0.02)\n  (solder_paste_margin -0.01)\n  (solder_paste_margin_ratio -0.2)\n  (duplicate_pad_numbers_are_jumpers yes)\n  (fp_text reference \"R1\" (at 0 0) (layer \"F.SilkS\"))\n  (fp_line (start 0 0) (end 1 1) (layer \"F.SilkS\"))\n  (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\" \"F.Mask\"))\n  (model \"foo.step\")\n  (zone)\n  (group (id \"g1\"))\n)\n";
+        let src = "(footprint \"X\" (version 20260101) (generator pcbnew) (generator_version \"10.0\") (layer \"F.Cu\")\n  (descr \"demo\")\n  (tags \"a b\")\n  (property \"Reference\" \"R?\")\n  (property \"Value\" \"X\")\n  (attr smd)\n  (private_layers \"In1.Cu\")\n  (net_tie_pad_groups \"1,2\")\n  (solder_mask_margin 0.02)\n  (solder_paste_margin -0.01)\n  (solder_paste_margin_ratio -0.2)\n  (duplicate_pad_numbers_are_jumpers yes)\n  (fp_text reference \"R1\" (at 0 0) (layer \"F.SilkS\"))\n  (fp_line (start 0 0) (end 1 1) (layer \"F.SilkS\"))\n  (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\" \"F.Mask\"))\n  (model \"foo.step\")\n  (zone)\n  (group (id \"g1\"))\n  (dimension)\n)\n";
         fs::write(&path, src).expect("write fixture");
 
         let doc = FootprintFile::read(&path).expect("read");
@@ -400,6 +462,7 @@ mod tests {
         assert_eq!(doc.ast().model_count, 1);
         assert_eq!(doc.ast().zone_count, 1);
         assert_eq!(doc.ast().group_count, 1);
+        assert_eq!(doc.ast().dimension_count, 1);
         assert!(doc.ast().unknown_nodes.is_empty());
 
         let _ = fs::remove_file(path);

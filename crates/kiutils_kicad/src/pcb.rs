@@ -1292,9 +1292,15 @@ fn validate_version(version: Option<i32>) -> Result<Vec<Diagnostic>, Error> {
 
     if let Some(v) = version {
         if policy.reject_older && !policy.accepts(v) {
-            return Err(Error::Validation(format!(
-                "unsupported KiCad version {v}; expected v9+ format"
-            )));
+            diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                code: "legacy_format",
+                message: format!(
+                    "version {v} is older than v9 target; parsing in compatibility mode"
+                ),
+                span: None,
+                hint: Some("parser support for pre-v9 token variants is best-effort".to_string()),
+            });
         }
 
         if policy.is_future_for_target(v) {
@@ -1365,15 +1371,13 @@ mod tests {
     }
 
     #[test]
-    fn read_rejects_old_version() {
+    fn read_warns_on_legacy_version() {
         let path = tmp_file("pcb_old_version");
         fs::write(&path, "(kicad_pcb (version 20220101))\n").expect("write fixture");
 
-        let err = PcbFile::read(&path).expect_err("must fail");
-        match err {
-            Error::Validation(msg) => assert!(msg.contains("v9+")),
-            other => panic!("unexpected error: {other}"),
-        }
+        let doc = PcbFile::read(&path).expect("read");
+        assert_eq!(doc.diagnostics().len(), 1);
+        assert_eq!(doc.diagnostics()[0].code, "legacy_format");
 
         let _ = fs::remove_file(path);
     }

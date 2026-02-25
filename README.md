@@ -29,6 +29,7 @@ Implementation policy (locked 2026-02-23):
 - AST `*_count` values are debug convenience (non-normative API).
 - `kiutils-inspect` machine schema stability first; debug detail should be opt-in.
 - Version checks stay post-parse by default for compatibility.
+- Pre-v9 PCB/footprint versions are parsed in best-effort compatibility mode with `legacy_format` warnings.
 - `.kicad_dru` condition strings stay verbatim in v1.
 - Unknown diagnostics are developer-focused; end-user mode should summarize.
 
