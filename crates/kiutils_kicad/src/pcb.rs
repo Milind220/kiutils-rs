@@ -1684,6 +1684,28 @@ mod tests {
     }
 
     #[test]
+    fn lossless_write_preserves_unrelated_formatting_for_targeted_edit() {
+        let path = tmp_file("pcb_lossless_targeted_edit");
+        let src =
+            "(kicad_pcb  (version   20241229)\n  (generator pcbnew)\n  (future_token   1   2)\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.set_version(20260101);
+
+        let out = tmp_file("pcb_lossless_targeted_edit_out");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert_eq!(
+            written,
+            "(kicad_pcb  (version 20260101)\n  (generator pcbnew)\n  (future_token   1   2)\n)\n"
+        );
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
     fn edit_roundtrip_updates_user_paper_dimensions() {
         let path = tmp_file("pcb_edit_paper_user");
         let src = "(kicad_pcb (version 20260101) (generator pcbnew) (paper A4))\n";

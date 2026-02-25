@@ -241,6 +241,78 @@ pub(crate) fn canonicalize_and_reparse(cst: &mut CstDocument) {
     }
 }
 
+fn node_eq_ignoring_span(a: &Node, b: &Node) -> bool {
+    match (a, b) {
+        (Node::Atom { atom: aa, .. }, Node::Atom { atom: ba, .. }) => aa == ba,
+        (Node::List { items: ai, .. }, Node::List { items: bi, .. }) => {
+            ai.len() == bi.len()
+                && ai
+                    .iter()
+                    .zip(bi.iter())
+                    .all(|(an, bn)| node_eq_ignoring_span(an, bn))
+        }
+        _ => false,
+    }
+}
+
+fn span_of(node: &Node) -> Span {
+    match node {
+        Node::List { span, .. } | Node::Atom { span, .. } => *span,
+    }
+}
+
+fn inline_canonical(node: &Node) -> String {
+    let mut text = CstDocument {
+        raw: String::new(),
+        nodes: vec![node.clone()],
+    }
+    .to_canonical_string();
+    if text.ends_with('\n') {
+        text.pop();
+    }
+    text
+}
+
+fn replace_span(src: &str, span: Span, replacement: &str) -> Option<String> {
+    if span.start > span.end || span.end > src.len() {
+        return None;
+    }
+    let prefix = src.get(..span.start)?;
+    let suffix = src.get(span.end..)?;
+    Some(format!("{prefix}{replacement}{suffix}"))
+}
+
+fn patch_single_root_child_replacement_raw(
+    before: &CstDocument,
+    after: &CstDocument,
+) -> Option<String> {
+    let (before_items, after_items) = match (before.nodes.first(), after.nodes.first()) {
+        (Some(Node::List { items: b, .. }), Some(Node::List { items: a, .. })) => (b, a),
+        _ => return None,
+    };
+    if before_items.len() != after_items.len() || before_items.is_empty() {
+        return None;
+    }
+    if !node_eq_ignoring_span(&before_items[0], &after_items[0]) {
+        return None;
+    }
+
+    let mut changed_idx = None;
+    for idx in 1..before_items.len() {
+        if !node_eq_ignoring_span(&before_items[idx], &after_items[idx]) {
+            if changed_idx.is_some() {
+                return None;
+            }
+            changed_idx = Some(idx);
+        }
+    }
+
+    let idx = changed_idx?;
+    let span = span_of(&before_items[idx]);
+    let replacement = inline_canonical(&after_items[idx]);
+    replace_span(&before.raw, span, &replacement)
+}
+
 pub(crate) fn mutate_root_and_refresh<T, FM, FA, FD>(
     cst: &mut CstDocument,
     ast: &mut T,
@@ -253,12 +325,21 @@ pub(crate) fn mutate_root_and_refresh<T, FM, FA, FD>(
     FA: Fn(&CstDocument) -> T,
     FD: Fn(&CstDocument, &T) -> Vec<Diagnostic>,
 {
+    let before = cst.clone();
     let changed = root_items_mut(cst).map(mutate).unwrap_or(false);
     if !changed {
         return;
     }
 
-    canonicalize_and_reparse(cst);
+    if let Some(patched_raw) = patch_single_root_child_replacement_raw(&before, cst) {
+        if let Ok(parsed) = parse_one(&patched_raw) {
+            *cst = parsed;
+        } else {
+            canonicalize_and_reparse(cst);
+        }
+    } else {
+        canonicalize_and_reparse(cst);
+    }
     *ast = parse_ast(cst);
     *diagnostics = collect_diagnostics(cst, ast);
 }
@@ -284,12 +365,42 @@ pub(crate) fn mutate_nodes_and_refresh_rootless<T, FM, FA, FD>(
     FA: Fn(&CstDocument) -> T,
     FD: Fn(&CstDocument, &T) -> Vec<Diagnostic>,
 {
+    let before = cst.clone();
     let changed = mutate(&mut cst.nodes);
     if !changed {
         return;
     }
 
-    canonicalize_and_reparse_rootless(cst);
+    if before.nodes.len() == cst.nodes.len() {
+        let mut changed_idx = None;
+        for idx in 0..before.nodes.len() {
+            if !node_eq_ignoring_span(&before.nodes[idx], &cst.nodes[idx]) {
+                if changed_idx.is_some() {
+                    changed_idx = None;
+                    break;
+                }
+                changed_idx = Some(idx);
+            }
+        }
+
+        if let Some(idx) = changed_idx {
+            let span = span_of(&before.nodes[idx]);
+            let replacement = inline_canonical(&cst.nodes[idx]);
+            if let Some(patched_raw) = replace_span(&before.raw, span, &replacement) {
+                if let Ok(parsed) = parse_rootless(&patched_raw) {
+                    *cst = parsed;
+                } else {
+                    canonicalize_and_reparse_rootless(cst);
+                }
+            } else {
+                canonicalize_and_reparse_rootless(cst);
+            }
+        } else {
+            canonicalize_and_reparse_rootless(cst);
+        }
+    } else {
+        canonicalize_and_reparse_rootless(cst);
+    }
     *ast = parse_ast(cst);
     *diagnostics = collect_diagnostics(cst, ast);
 }
