@@ -26,12 +26,7 @@ fn run_inspect(args: &[&str]) -> String {
 #[test]
 fn inspect_pcb_json_contract_smoke() {
     let path = fixture("sample.kicad_pcb");
-    let out = run_inspect(&[
-        path.to_str().expect("path str"),
-        "--type",
-        "pcb",
-        "--json",
-    ]);
+    let out = run_inspect(&[path.to_str().expect("path str"), "--type", "pcb", "--json"]);
     let v: Value = serde_json::from_str(out.trim()).expect("json output");
     let o = v.as_object().expect("json object");
 
@@ -72,10 +67,7 @@ fn inspect_footprint_json_contract_smoke() {
     let v: Value = serde_json::from_str(out.trim()).expect("json output");
     let o = v.as_object().expect("json object");
 
-    assert_eq!(
-        o.get("kind"),
-        Some(&Value::String("footprint".to_string()))
-    );
+    assert_eq!(o.get("kind"), Some(&Value::String("footprint".to_string())));
     assert_eq!(
         o.get("path"),
         Some(&Value::String(path.to_string_lossy().to_string()))
@@ -98,6 +90,38 @@ fn inspect_footprint_text_contract_smoke() {
     assert!(out.contains("version: Some(20260101)"));
     assert!(out.contains("unknown_count: 1"));
     assert!(out.contains("diagnostic_count: 0"));
+}
+
+#[test]
+fn inspect_symbol_json_contract_smoke() {
+    let path = fixture("sample.kicad_sym");
+    let out = run_inspect(&[
+        path.to_str().expect("path str"),
+        "--type",
+        "symbol",
+        "--json",
+    ]);
+    let v: Value = serde_json::from_str(out.trim()).expect("json output");
+    let o = v.as_object().expect("json object");
+
+    assert_eq!(o.get("kind"), Some(&Value::String("symbol".to_string())));
+    assert_eq!(
+        o.get("path"),
+        Some(&Value::String(path.to_string_lossy().to_string()))
+    );
+    assert_eq!(o.get("symbol_count"), Some(&Value::from(1)));
+    assert_eq!(o.get("unknown_count"), Some(&Value::from(1)));
+}
+
+#[test]
+fn inspect_symbol_text_contract_smoke() {
+    let path = fixture("sample.kicad_sym");
+    let out = run_inspect(&[path.to_str().expect("path str"), "--type", "symbol"]);
+
+    assert!(out.contains("kind: symbol"));
+    assert!(out.contains(&format!("path: {}", path.display())));
+    assert!(out.contains("symbol_count: 1"));
+    assert!(out.contains("unknown_count: 1"));
 }
 
 #[test]
@@ -135,12 +159,7 @@ fn inspect_fplib_text_contract_smoke() {
 #[test]
 fn inspect_dru_json_contract_smoke() {
     let path = fixture("sample.kicad_dru");
-    let out = run_inspect(&[
-        path.to_str().expect("path str"),
-        "--type",
-        "dru",
-        "--json",
-    ]);
+    let out = run_inspect(&[path.to_str().expect("path str"), "--type", "dru", "--json"]);
     let v: Value = serde_json::from_str(out.trim()).expect("json output");
     let o = v.as_object().expect("json object");
 

@@ -1,11 +1,18 @@
 use std::fs;
 use std::path::Path;
 
-use kiutils_sexpr::{parse_one, Atom, CstDocument, Node, Span};
+use kiutils_sexpr::{parse_one, Atom, CstDocument, Node};
 
-use crate::diagnostic::{Diagnostic, Severity};
-use crate::sexpr_utils::{atom_as_i32, atom_as_string, head_of, second_atom_i32, second_atom_string};
-use crate::version::VersionPolicy;
+use crate::diagnostic::Diagnostic;
+use crate::sexpr_edit::{
+    atom_quoted, atom_symbol, child_index, ensure_root_head_any, list_node,
+    mutate_root_and_refresh, remove_property as remove_property_node, upsert_child_scalar,
+    upsert_node, upsert_property_preserve_tail, upsert_scalar,
+};
+use crate::sexpr_utils::{
+    atom_as_i32, atom_as_string, head_of, second_atom_i32, second_atom_string,
+};
+use crate::version_diag::collect_version_diagnostics;
 use crate::{Error, UnknownNode, WriteMode};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -275,22 +282,23 @@ impl PcbDocument {
 
     pub fn set_version(&mut self, version: i32) -> &mut Self {
         self.mutate_root_items(|items| {
-            upsert_top_level_scalar(items, "version", atom_symbol(version.to_string()))
+            upsert_scalar(items, "version", atom_symbol(version.to_string()), 1)
         })
     }
 
     pub fn set_generator<S: Into<String>>(&mut self, generator: S) -> &mut Self {
         self.mutate_root_items(|items| {
-            upsert_top_level_scalar(items, "generator", atom_symbol(generator.into()))
+            upsert_scalar(items, "generator", atom_symbol(generator.into()), 1)
         })
     }
 
     pub fn set_generator_version<S: Into<String>>(&mut self, generator_version: S) -> &mut Self {
         self.mutate_root_items(|items| {
-            upsert_top_level_scalar(
+            upsert_scalar(
                 items,
                 "generator_version",
                 atom_quoted(generator_version.into()),
+                1,
             )
         })
     }
@@ -304,7 +312,7 @@ impl PcbDocument {
         if let Some(orientation) = orientation {
             nodes.push(atom_symbol(orientation.to_string()));
         }
-        self.mutate_root_items(|items| upsert_top_level_node(items, "paper", list_node(nodes)))
+        self.mutate_root_items(|items| upsert_node(items, "paper", list_node(nodes), 1))
     }
 
     pub fn set_paper_user(
@@ -322,7 +330,7 @@ impl PcbDocument {
         if let Some(orientation) = orientation {
             nodes.push(atom_symbol(orientation.to_string()));
         }
-        self.mutate_root_items(|items| upsert_top_level_node(items, "paper", list_node(nodes)))
+        self.mutate_root_items(|items| upsert_node(items, "paper", list_node(nodes), 1))
     }
 
     pub fn set_title<S: Into<String>>(&mut self, title: S) -> &mut Self {
@@ -332,7 +340,9 @@ impl PcbDocument {
     }
 
     pub fn set_date<S: Into<String>>(&mut self, date: S) -> &mut Self {
-        self.mutate_root_items(|items| upsert_title_block_scalar(items, "date", atom_quoted(date.into())))
+        self.mutate_root_items(|items| {
+            upsert_title_block_scalar(items, "date", atom_quoted(date.into()))
+        })
     }
 
     pub fn set_revision<S: Into<String>>(&mut self, revision: S) -> &mut Self {
@@ -354,19 +364,12 @@ impl PcbDocument {
     ) -> &mut Self {
         let key = key.into();
         let value = value.into();
-        self.mutate_root_items(|items| upsert_property(items, &key, &value))
+        self.mutate_root_items(|items| upsert_property_preserve_tail(items, &key, &value, 1))
     }
 
     pub fn remove_property(&mut self, key: &str) -> &mut Self {
         let key = key.to_string();
-        self.mutate_root_items(|items| {
-            if let Some(idx) = find_property_index(items, &key) {
-                items.remove(idx);
-                true
-            } else {
-                false
-            }
-        })
+        self.mutate_root_items(|items| remove_property_node(items, &key, 1))
     }
 
     pub fn cst(&self) -> &CstDocument {
@@ -393,22 +396,15 @@ impl PcbDocument {
     where
         F: FnOnce(&mut Vec<Node>) -> bool,
     {
-        let changed = root_items_mut(&mut self.cst).map(mutate).unwrap_or(false);
-        if changed {
-            self.refresh_from_cst();
-        }
+        mutate_root_and_refresh(
+            &mut self.cst,
+            &mut self.ast,
+            &mut self.diagnostics,
+            mutate,
+            parse_ast,
+            |_cst, ast| collect_diagnostics(ast.version),
+        );
         self
-    }
-
-    fn refresh_from_cst(&mut self) {
-        let canonical = self.cst.to_canonical_string();
-        if let Ok(cst) = parse_one(&canonical) {
-            self.cst = cst;
-        } else {
-            self.cst.raw = canonical;
-        }
-        self.ast = parse_ast(&self.cst);
-        self.diagnostics = collect_diagnostics(self.ast.version);
     }
 }
 
@@ -418,7 +414,7 @@ impl PcbFile {
     pub fn read<P: AsRef<Path>>(path: P) -> Result<PcbDocument, Error> {
         let raw = fs::read_to_string(path)?;
         let cst = parse_one(&raw)?;
-        ensure_head(&cst, "kicad_pcb")?;
+        ensure_root_head_any(&cst, &["kicad_pcb"])?;
 
         let ast = parse_ast(&cst);
         let diagnostics = collect_diagnostics(ast.version);
@@ -431,188 +427,25 @@ impl PcbFile {
     }
 }
 
-fn root_items_mut(cst: &mut CstDocument) -> Option<&mut Vec<Node>> {
-    match cst.nodes.first_mut() {
-        Some(Node::List { items, .. }) => Some(items),
-        _ => None,
-    }
-}
-
 fn collect_diagnostics(version: Option<i32>) -> Vec<Diagnostic> {
-    validate_version(version).unwrap_or_default()
-}
-
-fn span_zero() -> Span {
-    Span { start: 0, end: 0 }
-}
-
-fn atom_symbol(value: String) -> Node {
-    Node::Atom {
-        atom: Atom::Symbol(value),
-        span: span_zero(),
-    }
-}
-
-fn atom_quoted(value: String) -> Node {
-    Node::Atom {
-        atom: Atom::Quoted(value),
-        span: span_zero(),
-    }
-}
-
-fn list_node(items: Vec<Node>) -> Node {
-    Node::List {
-        items,
-        span: span_zero(),
-    }
-}
-
-fn top_level_child_index(items: &[Node], head: &str) -> Option<usize> {
-    items
-        .iter()
-        .enumerate()
-        .skip(1)
-        .find(|(_, node)| head_of(node) == Some(head))
-        .map(|(idx, _)| idx)
-}
-
-fn upsert_top_level_node(items: &mut Vec<Node>, head: &str, node: Node) -> bool {
-    if let Some(idx) = top_level_child_index(items, head) {
-        if items[idx] == node {
-            false
-        } else {
-            items[idx] = node;
-            true
-        }
-    } else {
-        items.push(node);
-        true
-    }
-}
-
-fn upsert_top_level_scalar(items: &mut Vec<Node>, head: &str, value: Node) -> bool {
-    upsert_top_level_node(
-        items,
-        head,
-        list_node(vec![atom_symbol(head.to_string()), value]),
-    )
-}
-
-fn upsert_child_scalar(items: &mut Vec<Node>, head: &str, value: Node) -> bool {
-    let replacement = list_node(vec![atom_symbol(head.to_string()), value]);
-    let existing = items
-        .iter()
-        .enumerate()
-        .skip(1)
-        .find(|(_, node)| head_of(node) == Some(head))
-        .map(|(idx, _)| idx);
-    if let Some(idx) = existing {
-        if items[idx] == replacement {
-            false
-        } else {
-            items[idx] = replacement;
-            true
-        }
-    } else {
-        items.push(replacement);
-        true
-    }
+    collect_version_diagnostics(version)
 }
 
 fn upsert_title_block_scalar(items: &mut Vec<Node>, head: &str, value: Node) -> bool {
-    let tb_idx = if let Some(idx) = top_level_child_index(items, "title_block") {
+    let tb_idx = if let Some(idx) = child_index(items, "title_block", 1) {
         idx
     } else {
         items.push(list_node(vec![atom_symbol("title_block".to_string())]));
         items.len() - 1
     };
 
-    let Some(Node::List { items: title_items, .. }) = items.get_mut(tb_idx) else {
+    let Some(Node::List {
+        items: title_items, ..
+    }) = items.get_mut(tb_idx)
+    else {
         return false;
     };
     upsert_child_scalar(title_items, head, value)
-}
-
-fn property_node(key: &str, value: &str) -> Node {
-    list_node(vec![
-        atom_symbol("property".to_string()),
-        atom_quoted(key.to_string()),
-        atom_quoted(value.to_string()),
-    ])
-}
-
-fn find_property_index(items: &[Node], key: &str) -> Option<usize> {
-    items
-        .iter()
-        .enumerate()
-        .skip(1)
-        .find(|(_, node)| {
-            if head_of(node) != Some("property") {
-                return false;
-            }
-            match node {
-                Node::List { items: prop_items, .. } => {
-                    prop_items.get(1).and_then(atom_as_string).as_deref() == Some(key)
-                }
-                _ => false,
-            }
-        })
-        .map(|(idx, _)| idx)
-}
-
-fn upsert_property(items: &mut Vec<Node>, key: &str, value: &str) -> bool {
-    if let Some(idx) = find_property_index(items, key) {
-        match items.get_mut(idx) {
-            Some(Node::List { items: prop_items, .. }) => {
-                if prop_items.len() > 2 {
-                    let replacement = atom_quoted(value.to_string());
-                    if prop_items[2] == replacement {
-                        false
-                    } else {
-                        prop_items[2] = replacement;
-                        true
-                    }
-                } else {
-                    let replacement = property_node(key, value);
-                    if items[idx] == replacement {
-                        false
-                    } else {
-                        items[idx] = replacement;
-                        true
-                    }
-                }
-            }
-            _ => false,
-        }
-    } else {
-        items.push(property_node(key, value));
-        true
-    }
-}
-
-fn ensure_head(cst: &CstDocument, expected: &str) -> Result<(), Error> {
-    let head = cst
-        .nodes
-        .first()
-        .and_then(|n| match n {
-            Node::List { items, .. } => items.first(),
-            _ => None,
-        })
-        .and_then(|n| match n {
-            Node::Atom {
-                atom: Atom::Symbol(s),
-                ..
-            } => Some(s.as_str()),
-            _ => None,
-        });
-
-    match head {
-        Some(h) if h == expected => Ok(()),
-        Some(h) => Err(Error::Validation(format!(
-            "expected root token `{expected}`, got `{h}`"
-        ))),
-        None => Err(Error::Validation("missing root token".to_string())),
-    }
 }
 
 fn parse_ast(cst: &CstDocument) -> PcbAst {
@@ -1390,7 +1223,10 @@ fn parse_property(node: &Node) -> Option<PcbProperty> {
     let Node::List { items, .. } = node else {
         return None;
     };
-    if !matches!(items.first().and_then(atom_as_string).as_deref(), Some("property")) {
+    if !matches!(
+        items.first().and_then(atom_as_string).as_deref(),
+        Some("property")
+    ) {
         return None;
     }
     let key = items.get(1).and_then(atom_as_string)?;
@@ -1495,7 +1331,11 @@ fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
                 match head {
                     "stackup" => {
                         has_stackup = true;
-                        if let Node::List { items: stackup_items, .. } = child {
+                        if let Node::List {
+                            items: stackup_items,
+                            ..
+                        } = child
+                        {
                             stackup_layer_count = stackup_items
                                 .iter()
                                 .filter(|n| matches!(head_of(n), Some("layer")))
@@ -1561,40 +1401,6 @@ fn parse_xy_and_angle(node: &Node) -> (Option<[f64; 2]>, Option<f64>) {
         (Some(x), Some(y)) => (Some([x, y]), rot),
         _ => (None, rot),
     }
-}
-
-fn validate_version(version: Option<i32>) -> Result<Vec<Diagnostic>, Error> {
-    let policy = VersionPolicy::default();
-    let mut diagnostics = Vec::new();
-
-    if let Some(v) = version {
-        if policy.reject_older && !policy.accepts(v) {
-            diagnostics.push(Diagnostic {
-                severity: Severity::Warning,
-                code: "legacy_format",
-                message: format!(
-                    "version {v} is older than v9 target; parsing in compatibility mode"
-                ),
-                span: None,
-                hint: Some("parser support for pre-v9 token variants is best-effort".to_string()),
-            });
-        }
-
-        if policy.is_future_for_target(v) {
-            diagnostics.push(Diagnostic {
-                severity: Severity::Warning,
-                code: "future_format",
-                message: format!(
-                    "version {v} is newer than target {:?}; keeping lossless CST for compatibility",
-                    policy.target
-                ),
-                span: None,
-                hint: Some("consider newer parser coverage for this token set".to_string()),
-            });
-        }
-    }
-
-    Ok(diagnostics)
 }
 
 #[cfg(test)]
@@ -1694,7 +1500,10 @@ mod tests {
 
         let doc = PcbFile::read(&path).expect("read");
         assert_eq!(doc.ast().unknown_nodes.len(), 1);
-        assert_eq!(doc.ast().unknown_nodes[0].head.as_deref(), Some("mystery_token"));
+        assert_eq!(
+            doc.ast().unknown_nodes[0].head.as_deref(),
+            Some("mystery_token")
+        );
 
         let out = tmp_file("pcb_unknown_out");
         doc.write(&out).expect("write");
@@ -1740,10 +1549,7 @@ mod tests {
             Some("portrait".to_string())
         );
         assert_eq!(
-            doc.ast()
-                .title_block
-                .as_ref()
-                .and_then(|t| t.title.clone()),
+            doc.ast().title_block.as_ref().and_then(|t| t.title.clone()),
             Some("Demo".to_string())
         );
         assert_eq!(
@@ -1758,10 +1564,19 @@ mod tests {
             Some("c1".to_string())
         );
         assert_eq!(doc.ast().setup.as_ref().map(|s| s.has_stackup), Some(true));
-        assert_eq!(doc.ast().setup.as_ref().map(|s| s.stackup_layer_count), Some(2));
-        assert_eq!(doc.ast().setup.as_ref().map(|s| s.has_plot_settings), Some(true));
         assert_eq!(
-            doc.ast().setup.as_ref().and_then(|s| s.pad_to_mask_clearance),
+            doc.ast().setup.as_ref().map(|s| s.stackup_layer_count),
+            Some(2)
+        );
+        assert_eq!(
+            doc.ast().setup.as_ref().map(|s| s.has_plot_settings),
+            Some(true)
+        );
+        assert_eq!(
+            doc.ast()
+                .setup
+                .as_ref()
+                .and_then(|s| s.pad_to_mask_clearance),
             Some(0.1)
         );
         assert_eq!(doc.ast().net_count, 1);
@@ -1849,7 +1664,10 @@ mod tests {
         let doc = PcbFile::read(&path).expect("read");
         assert_eq!(doc.ast().dimension_count, 1);
         assert_eq!(doc.ast().dimensions.len(), 1);
-        assert_eq!(doc.ast().dimensions[0].dimension_type.as_deref(), Some("aligned"));
+        assert_eq!(
+            doc.ast().dimensions[0].dimension_type.as_deref(),
+            Some("aligned")
+        );
         assert_eq!(doc.ast().dimensions[0].layer.as_deref(), Some("Cmts.User"));
         assert!(doc.ast().dimensions[0].format_present);
         assert_eq!(doc.ast().dimensions[0].gr_text_count, 1);
@@ -1912,7 +1730,11 @@ mod tests {
             Some("A3".to_string())
         );
         assert_eq!(
-            reread.ast().paper.as_ref().and_then(|p| p.orientation.clone()),
+            reread
+                .ast()
+                .paper
+                .as_ref()
+                .and_then(|p| p.orientation.clone()),
             Some("portrait".to_string())
         );
         assert_eq!(
@@ -1946,10 +1768,20 @@ mod tests {
             reread.ast().paper.as_ref().and_then(|p| p.kind.clone()),
             Some("User".to_string())
         );
-        assert_eq!(reread.ast().paper.as_ref().and_then(|p| p.width), Some(100.0));
-        assert_eq!(reread.ast().paper.as_ref().and_then(|p| p.height), Some(80.0));
         assert_eq!(
-            reread.ast().paper.as_ref().and_then(|p| p.orientation.clone()),
+            reread.ast().paper.as_ref().and_then(|p| p.width),
+            Some(100.0)
+        );
+        assert_eq!(
+            reread.ast().paper.as_ref().and_then(|p| p.height),
+            Some(80.0)
+        );
+        assert_eq!(
+            reread
+                .ast()
+                .paper
+                .as_ref()
+                .and_then(|p| p.orientation.clone()),
             Some("landscape".to_string())
         );
 

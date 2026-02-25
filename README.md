@@ -5,6 +5,7 @@ Rust-native, sync-first KiCad parser/formatter with lossless round-trip defaults
 Scope (v1):
 - `.kicad_pcb`
 - `.kicad_mod`
+- `.kicad_sym`
 - `fp-lib-table`
 - `.kicad_dru`
 - `.kicad_pro`
@@ -15,6 +16,7 @@ Current status:
   - `kiutils_kicad`: typed KiCad API layer
 - Implemented: initial `PcbFile::read` path with lossless write-back and tests
 - Implemented: typed readers for PCB/footprint/lib-table/design-rules/project
+- Implemented: typed reader for symbol libraries (`.kicad_sym`)
 - Implemented: unknown token/field capture and `WriteMode::{Lossless, Canonical}`
 
 Design goals:
@@ -56,6 +58,7 @@ cargo run -p kiutils_kicad --bin kiutils-inspect -- <path>
 
 Flags:
 - `--type auto|pcb|footprint|fplib|dru|project`
+- `--type auto|pcb|footprint|symbol|fplib|dru|project`
 - `--json`
 - `--show-cst`
 - `--show-canonical`
@@ -125,6 +128,28 @@ Runnable example:
 
 ```bash
 cargo run -p kiutils_kicad --example pcb_roundtrip -- input.kicad_pcb output.kicad_pcb
+```
+
+## Symbol library read/modify/write
+
+```rust
+use kiutils_kicad::SymbolLibFile;
+
+let mut doc = SymbolLibFile::read("input.kicad_sym")?;
+doc.set_version(20260101)
+    .set_generator("kiutils")
+    .set_generator_version("dev")
+    .rename_first_symbol("RenamedSymbol")
+    .upsert_symbol_property("RenamedSymbol", "Value", "NewValue");
+
+doc.write("output.kicad_sym")?;
+```
+
+Runnable examples:
+
+```bash
+cargo run -p kiutils_kicad --example symbol_roundtrip -- input.kicad_sym output.kicad_sym
+cargo run -p kiutils_kicad --example symbol_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/symbols
 ```
 
 ## License

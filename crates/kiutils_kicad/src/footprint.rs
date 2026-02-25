@@ -1,13 +1,18 @@
 use std::fs;
 use std::path::Path;
 
-use kiutils_sexpr::{parse_one, Atom, CstDocument, Node, Span};
+use kiutils_sexpr::{parse_one, CstDocument, Node};
 
 use crate::diagnostic::{Diagnostic, Severity};
+use crate::sexpr_edit::{
+    atom_quoted, atom_symbol, ensure_root_head_any, mutate_root_and_refresh,
+    remove_property as remove_property_node, root_head, upsert_property_preserve_tail,
+    upsert_scalar,
+};
 use crate::sexpr_utils::{
     atom_as_string, head_of, list_child_head_count, second_atom_i32, second_atom_string,
 };
-use crate::version::VersionPolicy;
+use crate::version_diag::collect_version_diagnostics;
 use crate::{Error, UnknownNode, WriteMode};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,42 +92,37 @@ impl FootprintDocument {
 
     pub fn set_version(&mut self, version: i32) -> &mut Self {
         self.mutate_root_items(|items| {
-            upsert_top_level_scalar(items, "version", atom_symbol(version.to_string()))
+            upsert_scalar(items, "version", atom_symbol(version.to_string()), 2)
         })
     }
 
     pub fn set_generator<S: Into<String>>(&mut self, generator: S) -> &mut Self {
         self.mutate_root_items(|items| {
-            upsert_top_level_scalar(items, "generator", atom_symbol(generator.into()))
+            upsert_scalar(items, "generator", atom_symbol(generator.into()), 2)
         })
     }
 
     pub fn set_generator_version<S: Into<String>>(&mut self, generator_version: S) -> &mut Self {
         self.mutate_root_items(|items| {
-            upsert_top_level_scalar(
+            upsert_scalar(
                 items,
                 "generator_version",
                 atom_quoted(generator_version.into()),
+                2,
             )
         })
     }
 
     pub fn set_layer<S: Into<String>>(&mut self, layer: S) -> &mut Self {
-        self.mutate_root_items(|items| {
-            upsert_top_level_scalar(items, "layer", atom_quoted(layer.into()))
-        })
+        self.mutate_root_items(|items| upsert_scalar(items, "layer", atom_quoted(layer.into()), 2))
     }
 
     pub fn set_descr<S: Into<String>>(&mut self, descr: S) -> &mut Self {
-        self.mutate_root_items(|items| {
-            upsert_top_level_scalar(items, "descr", atom_quoted(descr.into()))
-        })
+        self.mutate_root_items(|items| upsert_scalar(items, "descr", atom_quoted(descr.into()), 2))
     }
 
     pub fn set_tags<S: Into<String>>(&mut self, tags: S) -> &mut Self {
-        self.mutate_root_items(|items| {
-            upsert_top_level_scalar(items, "tags", atom_quoted(tags.into()))
-        })
+        self.mutate_root_items(|items| upsert_scalar(items, "tags", atom_quoted(tags.into()), 2))
     }
 
     pub fn set_reference<S: Into<String>>(&mut self, value: S) -> &mut Self {
@@ -140,41 +140,12 @@ impl FootprintDocument {
     ) -> &mut Self {
         let key = key.into();
         let value = value.into();
-        self.mutate_root_items(|items| {
-            let new_node = property_node(&key, &value);
-            if let Some(idx) = find_property_index(items, &key) {
-                if items[idx] == new_node {
-                    false
-                } else {
-                    items[idx] = new_node;
-                    true
-                }
-            } else {
-                let insert_at = items
-                    .iter()
-                    .enumerate()
-                    .skip(2)
-                    .filter(|(_, node)| head_of(node) == Some("property"))
-                    .map(|(idx, _)| idx)
-                    .last()
-                    .map(|idx| idx + 1)
-                    .unwrap_or(items.len());
-                items.insert(insert_at, new_node);
-                true
-            }
-        })
+        self.mutate_root_items(|items| upsert_property_preserve_tail(items, &key, &value, 2))
     }
 
     pub fn remove_property(&mut self, key: &str) -> &mut Self {
         let key = key.to_string();
-        self.mutate_root_items(|items| {
-            if let Some(idx) = find_property_index(items, &key) {
-                items.remove(idx);
-                true
-            } else {
-                false
-            }
-        })
+        self.mutate_root_items(|items| remove_property_node(items, &key, 2))
     }
 
     pub fn cst(&self) -> &CstDocument {
@@ -201,22 +172,15 @@ impl FootprintDocument {
     where
         F: FnOnce(&mut Vec<Node>) -> bool,
     {
-        let changed = root_items_mut(&mut self.cst).map(mutate).unwrap_or(false);
-        if changed {
-            self.refresh_from_cst();
-        }
+        mutate_root_and_refresh(
+            &mut self.cst,
+            &mut self.ast,
+            &mut self.diagnostics,
+            mutate,
+            parse_ast,
+            |cst, ast| collect_diagnostics(cst, ast.version),
+        );
         self
-    }
-
-    fn refresh_from_cst(&mut self) {
-        let canonical = self.cst.to_canonical_string();
-        if let Ok(cst) = parse_one(&canonical) {
-            self.cst = cst;
-        } else {
-            self.cst.raw = canonical;
-        }
-        self.ast = parse_ast(&self.cst);
-        self.diagnostics = collect_diagnostics(&self.cst, self.ast.version);
     }
 }
 
@@ -226,7 +190,7 @@ impl FootprintFile {
     pub fn read<P: AsRef<Path>>(path: P) -> Result<FootprintDocument, Error> {
         let raw = fs::read_to_string(path)?;
         let cst = parse_one(&raw)?;
-        ensure_head(&cst)?;
+        ensure_root_head_any(&cst, &["footprint", "module"])?;
         let ast = parse_ast(&cst);
         let diagnostics = collect_diagnostics(&cst, ast.version);
         Ok(FootprintDocument {
@@ -237,43 +201,8 @@ impl FootprintFile {
     }
 }
 
-fn ensure_head(cst: &CstDocument) -> Result<(), Error> {
-    let head = root_head(cst);
-
-    match head {
-        Some("footprint" | "module") => Ok(()),
-        Some(h) => Err(Error::Validation(format!(
-            "expected root token `footprint` or legacy `module`, got `{h}`"
-        ))),
-        None => Err(Error::Validation("missing root token".to_string())),
-    }
-}
-
-fn root_head(cst: &CstDocument) -> Option<&str> {
-    cst.nodes
-        .first()
-        .and_then(|n| match n {
-            Node::List { items, .. } => items.first(),
-            _ => None,
-        })
-        .and_then(|n| match n {
-            Node::Atom {
-                atom: Atom::Symbol(s),
-                ..
-            } => Some(s.as_str()),
-            _ => None,
-        })
-}
-
-fn root_items_mut(cst: &mut CstDocument) -> Option<&mut Vec<Node>> {
-    match cst.nodes.first_mut() {
-        Some(Node::List { items, .. }) => Some(items),
-        _ => None,
-    }
-}
-
 fn collect_diagnostics(cst: &CstDocument, version: Option<i32>) -> Vec<Diagnostic> {
-    let mut diagnostics = validate_version(version).unwrap_or_default();
+    let mut diagnostics = collect_version_diagnostics(version);
     if root_head(cst) == Some("module") {
         diagnostics.push(Diagnostic {
             severity: Severity::Warning,
@@ -285,82 +214,6 @@ fn collect_diagnostics(cst: &CstDocument, version: Option<i32>) -> Vec<Diagnosti
         });
     }
     diagnostics
-}
-
-fn span_zero() -> Span {
-    Span { start: 0, end: 0 }
-}
-
-fn atom_symbol(value: String) -> Node {
-    Node::Atom {
-        atom: Atom::Symbol(value),
-        span: span_zero(),
-    }
-}
-
-fn atom_quoted(value: String) -> Node {
-    Node::Atom {
-        atom: Atom::Quoted(value),
-        span: span_zero(),
-    }
-}
-
-fn list_node(items: Vec<Node>) -> Node {
-    Node::List {
-        items,
-        span: span_zero(),
-    }
-}
-
-fn top_level_child_index(items: &[Node], head: &str) -> Option<usize> {
-    items
-        .iter()
-        .enumerate()
-        .skip(2)
-        .find(|(_, node)| head_of(node) == Some(head))
-        .map(|(idx, _)| idx)
-}
-
-fn upsert_top_level_scalar(items: &mut Vec<Node>, head: &str, value: Node) -> bool {
-    let replacement = list_node(vec![atom_symbol(head.to_string()), value]);
-    if let Some(idx) = top_level_child_index(items, head) {
-        if items[idx] == replacement {
-            false
-        } else {
-            items[idx] = replacement;
-            true
-        }
-    } else {
-        items.push(replacement);
-        true
-    }
-}
-
-fn property_node(key: &str, value: &str) -> Node {
-    list_node(vec![
-        atom_symbol("property".to_string()),
-        atom_quoted(key.to_string()),
-        atom_quoted(value.to_string()),
-    ])
-}
-
-fn find_property_index(items: &[Node], key: &str) -> Option<usize> {
-    items
-        .iter()
-        .enumerate()
-        .skip(2)
-        .find(|(_, node)| {
-            if head_of(node) != Some("property") {
-                return false;
-            }
-            match node {
-                Node::List { items: prop_items, .. } => {
-                    prop_items.get(1).and_then(atom_as_string).as_deref() == Some(key)
-                }
-                _ => false,
-            }
-        })
-        .map(|(idx, _)| idx)
 }
 
 fn parse_ast(cst: &CstDocument) -> FootprintAst {
@@ -429,13 +282,12 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
                     solder_paste_margin_ratio = second_atom_string(item)
                 }
                 Some("duplicate_pad_numbers_are_jumpers") => {
-                    duplicate_pad_numbers_are_jumpers = second_atom_string(item).and_then(|s| {
-                        match s.as_str() {
+                    duplicate_pad_numbers_are_jumpers =
+                        second_atom_string(item).and_then(|s| match s.as_str() {
                             "yes" => Some(true),
                             "no" => Some(false),
                             _ => None,
-                        }
-                    })
+                        })
                 }
                 Some("pad") => pad_count += 1,
                 Some("model") => model_count += 1,
@@ -521,42 +373,6 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
         graphic_count,
         unknown_nodes,
     }
-}
-
-fn validate_version(version: Option<i32>) -> Result<Vec<Diagnostic>, Error> {
-    let policy = VersionPolicy::default();
-    let mut diagnostics = Vec::new();
-
-    if let Some(v) = version {
-        if policy.reject_older && !policy.accepts(v) {
-            diagnostics.push(Diagnostic {
-                severity: Severity::Warning,
-                code: "legacy_format",
-                message: format!(
-                    "version {v} is older than v9 target; parsing in compatibility mode"
-                ),
-                span: None,
-                hint: Some(
-                    "parser support for pre-v9 token variants is best-effort".to_string(),
-                ),
-            });
-        }
-
-        if policy.is_future_for_target(v) {
-            diagnostics.push(Diagnostic {
-                severity: Severity::Warning,
-                code: "future_format",
-                message: format!(
-                    "version {v} is newer than target {:?}; keeping lossless CST for compatibility",
-                    policy.target
-                ),
-                span: None,
-                hint: Some("consider newer parser coverage for this token set".to_string()),
-            });
-        }
-    }
-
-    Ok(diagnostics)
 }
 
 #[cfg(test)]
@@ -646,7 +462,10 @@ mod tests {
 
         let doc = FootprintFile::read(&path).expect("read");
         assert_eq!(doc.ast().unknown_nodes.len(), 1);
-        assert_eq!(doc.ast().unknown_nodes[0].head.as_deref(), Some("future_shape"));
+        assert_eq!(
+            doc.ast().unknown_nodes[0].head.as_deref(),
+            Some("future_shape")
+        );
 
         let _ = fs::remove_file(path);
     }

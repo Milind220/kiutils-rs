@@ -3,6 +3,7 @@
 //! Scope (v1):
 //! - `.kicad_pcb`
 //! - `.kicad_mod`
+//! - `.kicad_sym`
 //! - `fp-lib-table`
 //! - `.kicad_dru`
 //! - `.kicad_pro`
@@ -22,11 +23,14 @@ mod dru;
 mod error;
 mod footprint;
 mod lib_table;
-mod unknown;
 mod pcb;
 mod project;
+mod sexpr_edit;
 mod sexpr_utils;
+mod symbol;
+mod unknown;
 mod version;
+mod version_diag;
 mod write_mode;
 
 pub use batch::{read_pcbs, read_pcbs_from_refs};
@@ -35,12 +39,13 @@ pub use dru::{DesignRulesAst, DesignRulesDocument, DesignRulesFile};
 pub use error::Error;
 pub use footprint::{FootprintAst, FootprintDocument, FootprintFile};
 pub use lib_table::{FpLibTableAst, FpLibTableDocument, FpLibTableFile};
-pub use unknown::{UnknownField, UnknownNode};
 pub use pcb::{
-    PcbArcSummary, PcbAst, PcbDocument, PcbFile, PcbFootprintSummary, PcbGeneratedSummary,
-    PcbGraphicSummary, PcbGroupSummary, PcbLayer, PcbNet, PcbProperty, PcbSegmentSummary,
-    PcbSetupSummary, PcbTargetSummary, PcbViaSummary, PcbZoneSummary, PcbDimensionSummary,
+    PcbArcSummary, PcbAst, PcbDimensionSummary, PcbDocument, PcbFile, PcbFootprintSummary,
+    PcbGeneratedSummary, PcbGraphicSummary, PcbGroupSummary, PcbLayer, PcbNet, PcbProperty,
+    PcbSegmentSummary, PcbSetupSummary, PcbTargetSummary, PcbViaSummary, PcbZoneSummary,
 };
 pub use project::{ProjectAst, ProjectDocument, ProjectExtra, ProjectFile};
+pub use symbol::{SymbolLibAst, SymbolLibDocument, SymbolLibFile, SymbolSummary};
+pub use unknown::{UnknownField, UnknownNode};
 pub use version::{KiCadSeries, VersionPolicy};
 pub use write_mode::WriteMode;
