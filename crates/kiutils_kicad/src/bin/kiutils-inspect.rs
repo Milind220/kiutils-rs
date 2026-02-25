@@ -527,21 +527,7 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
 fn inspect_pcb(opts: &Opts) -> Result<(), String> {
     let doc = PcbFile::read(&opts.path).map_err(|e| e.to_string())?;
     let fields = pcb_fields(&doc);
-    if opts.as_json {
-        let mut m = serde_json::Map::new();
-        m.insert("kind".into(), json!("pcb"));
-        m.insert("path".into(), json!(opts.path));
-        for f in &fields {
-            m.insert(f.key.into(), f.json.clone());
-        }
-        println!("{}", Value::Object(m));
-    } else {
-        println!("kind: pcb");
-        println!("path: {}", opts.path.display());
-        for f in &fields {
-            println!("{}: {}", f.key, f.text);
-        }
-    }
+    emit_fields("pcb", &opts.path, &fields, opts.as_json);
 
     if opts.show_unknown {
         for n in &doc.ast().unknown_nodes {
@@ -570,21 +556,7 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
 fn inspect_footprint(opts: &Opts) -> Result<(), String> {
     let doc = FootprintFile::read(&opts.path).map_err(|e| e.to_string())?;
     let fields = footprint_fields(&doc);
-    if opts.as_json {
-        let mut m = serde_json::Map::new();
-        m.insert("kind".into(), json!("footprint"));
-        m.insert("path".into(), json!(opts.path));
-        for f in &fields {
-            m.insert(f.key.into(), f.json.clone());
-        }
-        println!("{}", Value::Object(m));
-    } else {
-        println!("kind: footprint");
-        println!("path: {}", opts.path.display());
-        for f in &fields {
-            println!("{}: {}", f.key, f.text);
-        }
-    }
+    emit_fields("footprint", &opts.path, &fields, opts.as_json);
     if opts.show_unknown {
         for n in &doc.ast().unknown_nodes {
             println!("unknown: head={:?} span={}..{}", n.head, n.span.start, n.span.end);

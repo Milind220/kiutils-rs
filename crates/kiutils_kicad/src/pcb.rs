@@ -1152,7 +1152,13 @@ fn parse_paper_summary(node: &Node) -> PcbPaperSummary {
     let kind = items.get(1).and_then(atom_as_string);
     let width = items.get(2).and_then(atom_as_f64);
     let height = items.get(3).and_then(atom_as_f64);
-    let orientation = items.get(4).and_then(atom_as_string);
+    let orientation = match items.get(2) {
+        Some(Node::Atom {
+            atom: Atom::Symbol(text),
+            ..
+        }) if text == "portrait" || text == "landscape" => Some(text.clone()),
+        _ => items.get(4).and_then(atom_as_string),
+    };
 
     PcbPaperSummary {
         kind,
@@ -1566,6 +1572,28 @@ mod tests {
         assert_eq!(doc.ast().dimensions[0].layer.as_deref(), Some("Cmts.User"));
         assert!(doc.ast().dimensions[0].format_present);
         assert_eq!(doc.ast().dimensions[0].gr_text_count, 1);
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn parses_standard_paper_orientation() {
+        let path = tmp_file("pcb_std_paper");
+        let src = "(kicad_pcb (version 20260101) (generator pcbnew) (paper A4 portrait))\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let doc = PcbFile::read(&path).expect("read");
+        assert!(doc.ast().has_paper);
+        assert_eq!(
+            doc.ast().paper.as_ref().and_then(|p| p.kind.clone()),
+            Some("A4".to_string())
+        );
+        assert_eq!(doc.ast().paper.as_ref().and_then(|p| p.width), None);
+        assert_eq!(doc.ast().paper.as_ref().and_then(|p| p.height), None);
+        assert_eq!(
+            doc.ast().paper.as_ref().and_then(|p| p.orientation.clone()),
+            Some("portrait".to_string())
+        );
 
         let _ = fs::remove_file(path);
     }

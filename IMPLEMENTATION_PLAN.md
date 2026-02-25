@@ -17,7 +17,7 @@ Core strategy:
 - API not mirroring Python; Rust-first ergonomic + explicit error/version handling.
 
 ## Why this is better than current `kiutils` baseline
-Observed in `/Users/milindsharma/Developer/kicad-oss/kiutils-rs/kiutils`:
+Observed in `./kiutils`:
 - Parser core is regex + nested Python lists (`src/kiutils/utils/sexpr.py`).
 - Token dispatch is manual `if item[0] == ...` chains (`src/kiutils/board.py`, `/footprint.py`, `/dru.py`, `/libraries.py`).
 - Unknown token handling is weak (generally dropped in typed projection).
@@ -166,7 +166,7 @@ Performance:
 - No expression-evaluator for design-rule conditions in v1 (string-preserving only).
 
 ## Simplification policy (locked 2026-02-23)
-- Treat `/Users/milindsharma/Developer/kicad-oss/kiutils-rs/kiutils` as read-only reference baseline.
+- Treat `./kiutils` as read-only reference baseline.
 - Refactor by module scope pressure, not arbitrary line-count thresholds.
 - `*_count` fields on AST are debug convenience, non-normative API.
 - `kiutils-inspect` should prioritize stable machine-readable schema; debug breadth can be opt-in (for example `--verbose`).
