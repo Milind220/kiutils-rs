@@ -99,6 +99,34 @@ Runnable example:
 cargo run -p kiutils_kicad --example footprint_roundtrip -- input.kicad_mod output.kicad_mod
 ```
 
+## PCB read/modify/write
+
+Chainable edit API on `PcbDocument`:
+
+```rust
+use kiutils_kicad::PcbFile;
+
+let mut doc = PcbFile::read("input.kicad_pcb")?;
+doc.set_version(20260101)
+    .set_generator("kiutils")
+    .set_generator_version("dev")
+    .set_paper_standard("A4", Some("portrait"))
+    .set_title("Demo Board")
+    .set_date("2026-02-25")
+    .set_revision("B")
+    .set_company("Lords")
+    .upsert_property("Owner", "Milind")
+    .remove_property("Obsolete");
+
+doc.write("output.kicad_pcb")?;
+```
+
+Runnable example:
+
+```bash
+cargo run -p kiutils_kicad --example pcb_roundtrip -- input.kicad_pcb output.kicad_pcb
+```
+
 ## License
 
 MIT
