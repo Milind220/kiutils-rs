@@ -82,10 +82,11 @@ pub(crate) fn child_index(items: &[Node], head: &str, skip: usize) -> Option<usi
 
 pub(crate) fn upsert_node(items: &mut Vec<Node>, head: &str, node: Node, skip: usize) -> bool {
     if let Some(idx) = child_index(items, head, skip) {
-        if node_eq_ignoring_span(&items[idx], &node) {
+        let merged = merge_replacement_preserve_tail(&items[idx], node);
+        if node_eq_ignoring_span(&items[idx], &merged) {
             false
         } else {
-            items[idx] = node;
+            items[idx] = merged;
             true
         }
     } else {
@@ -280,6 +281,40 @@ fn replace_span(src: &str, span: Span, replacement: &str) -> Option<String> {
     let prefix = src.get(..span.start)?;
     let suffix = src.get(span.end..)?;
     Some(format!("{prefix}{replacement}{suffix}"))
+}
+
+fn merge_replacement_preserve_tail(existing: &Node, replacement: Node) -> Node {
+    match (existing, replacement) {
+        (
+            Node::List {
+                items: existing_items,
+                ..
+            },
+            Node::List {
+                items: mut replacement_items,
+                span: replacement_span,
+            },
+        ) => {
+            let same_head = existing_items
+                .first()
+                .zip(replacement_items.first())
+                .map(|(a, b)| node_eq_ignoring_span(a, b))
+                .unwrap_or(false);
+            if same_head && existing_items.len() > replacement_items.len() {
+                replacement_items.extend_from_slice(&existing_items[replacement_items.len()..]);
+                Node::List {
+                    items: replacement_items,
+                    span: replacement_span,
+                }
+            } else {
+                Node::List {
+                    items: replacement_items,
+                    span: replacement_span,
+                }
+            }
+        }
+        (_, other) => other,
+    }
 }
 
 fn patch_single_root_child_replacement_raw(

@@ -1755,6 +1755,43 @@ mod tests {
     }
 
     #[test]
+    fn set_paper_preserves_unknown_tail_children() {
+        let path = tmp_file("pcb_paper_preserve_tail");
+        let src =
+            "(kicad_pcb (version 20241229) (generator pcbnew) (paper \"A4\" portrait (mystery 1)))\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.set_paper_standard("A3", Some("portrait"));
+
+        let out = tmp_file("pcb_paper_preserve_tail_out");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert!(written.contains("(paper \"A3\" portrait (mystery 1))"));
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
+    fn set_version_preserves_unknown_tail_children() {
+        let path = tmp_file("pcb_version_preserve_tail");
+        let src = "(kicad_pcb (version 20241229 extra_token) (generator pcbnew))\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.set_version(20260101);
+
+        let out = tmp_file("pcb_version_preserve_tail_out");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert!(written.contains("(version 20260101 extra_token)"));
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
     fn edit_roundtrip_updates_user_paper_dimensions() {
         let path = tmp_file("pcb_edit_paper_user");
         let src = "(kicad_pcb (version 20260101) (generator pcbnew) (paper A4))\n";
