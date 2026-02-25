@@ -535,6 +535,11 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 Some("general") => {
                     has_general = true;
                     general = Some(parse_general_summary(item));
+                    collect_unrecognized_children(
+                        item,
+                        &["thickness", "legacy_teardrops"],
+                        &mut unknown_nodes,
+                    );
                 }
                 Some("paper") => {
                     has_paper = true;
@@ -543,6 +548,11 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 Some("title_block") => {
                     has_title_block = true;
                     title_block = Some(parse_title_block(item).into());
+                    collect_unrecognized_children(
+                        item,
+                        &["title", "date", "rev", "company", "comment"],
+                        &mut unknown_nodes,
+                    );
                 }
                 Some("layers") => {
                     if let Node::List { items: inner, .. } = item {
@@ -553,6 +563,7 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 Some("setup") => {
                     has_setup = true;
                     setup = Some(parse_setup_summary(item));
+                    collect_unrecognized_setup_children(item, &mut unknown_nodes);
                 }
                 Some("embedded_fonts") => has_embedded_fonts = true,
                 Some("embedded_files") => {
@@ -1323,6 +1334,45 @@ fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
     }
 }
 
+fn collect_unrecognized_children(node: &Node, known_heads: &[&str], out: &mut Vec<UnknownNode>) {
+    let Node::List { items, .. } = node else {
+        return;
+    };
+    for child in items.iter().skip(1) {
+        match head_of(child) {
+            Some(head) if known_heads.contains(&head) => {}
+            _ => {
+                if let Some(unknown) = UnknownNode::from_node(child) {
+                    out.push(unknown);
+                }
+            }
+        }
+    }
+}
+
+fn collect_unrecognized_setup_children(node: &Node, out: &mut Vec<UnknownNode>) {
+    let Node::List { items, .. } = node else {
+        return;
+    };
+    for child in items.iter().skip(1) {
+        match head_of(child) {
+            Some("stackup") => {
+                collect_unrecognized_children(child, &["layer"], out);
+            }
+            Some("pcbplotparams")
+            | Some("pad_to_mask_clearance")
+            | Some("solder_mask_min_width")
+            | Some("aux_axis_origin")
+            | Some("grid_origin") => {}
+            _ => {
+                if let Some(unknown) = UnknownNode::from_node(child) {
+                    out.push(unknown);
+                }
+            }
+        }
+    }
+}
+
 fn parse_xy(node: &Node) -> Option<[f64; 2]> {
     let Node::List { items, .. } = node else {
         return None;
@@ -1791,6 +1841,27 @@ mod tests {
 
         let _ = fs::remove_file(path);
         let _ = fs::remove_file(out);
+    }
+
+    #[test]
+    fn captures_nested_unknown_nodes_in_setup_section() {
+        let path = tmp_file("pcb_nested_unknown_setup");
+        let src = "(kicad_pcb (version 20260101) (generator pcbnew)\n  (setup (stackup (layer \"F.Cu\") (mystery_stackup_token x)) (mystery_setup_token y))\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let doc = PcbFile::read(&path).expect("read");
+        assert!(doc
+            .ast()
+            .unknown_nodes
+            .iter()
+            .any(|n| n.head.as_deref() == Some("mystery_setup_token")));
+        assert!(doc
+            .ast()
+            .unknown_nodes
+            .iter()
+            .any(|n| n.head.as_deref() == Some("mystery_stackup_token")));
+
+        let _ = fs::remove_file(path);
     }
 
     #[test]
