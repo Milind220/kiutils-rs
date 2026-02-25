@@ -70,6 +70,35 @@ cargo run -p kiutils_kicad --bin kiutils-inspect -- \
   --show-unknown --show-diagnostics --show-canonical
 ```
 
+## Footprint read/modify/write
+
+Chainable edit API on `FootprintDocument`:
+
+```rust
+use kiutils_kicad::FootprintFile;
+
+let mut doc = FootprintFile::read("input.kicad_mod")?;
+doc.set_lib_id("My_Footprint")
+    .set_version(20260101)
+    .set_generator("kiutils")
+    .set_generator_version("dev")
+    .set_layer("B.Cu")
+    .set_descr("demo")
+    .set_tags("passive")
+    .set_reference("R1")
+    .set_value("10k")
+    .upsert_property("LCSC", "C25804")
+    .remove_property("Obsolete");
+
+doc.write("output.kicad_mod")?;
+```
+
+Runnable example:
+
+```bash
+cargo run -p kiutils_kicad --example footprint_roundtrip -- input.kicad_mod output.kicad_mod
+```
+
 ## License
 
 MIT
