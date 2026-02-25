@@ -82,7 +82,7 @@ pub(crate) fn child_index(items: &[Node], head: &str, skip: usize) -> Option<usi
 
 pub(crate) fn upsert_node(items: &mut Vec<Node>, head: &str, node: Node, skip: usize) -> bool {
     if let Some(idx) = child_index(items, head, skip) {
-        if items[idx] == node {
+        if node_eq_ignoring_span(&items[idx], &node) {
             false
         } else {
             items[idx] = node;
@@ -178,7 +178,7 @@ pub(crate) fn upsert_property_preserve_tail(
             }) => {
                 let replacement = atom_quoted(value.to_string());
                 if prop_items.len() > 2 {
-                    if prop_items[2] == replacement {
+                    if node_eq_ignoring_span(&prop_items[2], &replacement) {
                         false
                     } else {
                         prop_items[2] = replacement;
@@ -186,7 +186,7 @@ pub(crate) fn upsert_property_preserve_tail(
                     }
                 } else {
                     let full = property_node(key, value);
-                    if items[idx] == full {
+                    if node_eq_ignoring_span(&items[idx], &full) {
                         false
                     } else {
                         items[idx] = full;

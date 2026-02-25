@@ -620,4 +620,22 @@ mod tests {
         let _ = fs::remove_file(path);
         let _ = fs::remove_file(out);
     }
+
+    #[test]
+    fn no_op_setter_keeps_lossless_raw_unchanged() {
+        let path = tmp_file("footprint_noop_setter");
+        let src = "(footprint \"X\" (version   20260101) (generator pcbnew))\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = FootprintFile::read(&path).expect("read");
+        doc.set_version(20260101);
+
+        let out = tmp_file("footprint_noop_setter_out");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert_eq!(written, src);
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
 }

@@ -1706,6 +1706,24 @@ mod tests {
     }
 
     #[test]
+    fn no_op_setter_keeps_lossless_raw_unchanged() {
+        let path = tmp_file("pcb_noop_setter");
+        let src = "(kicad_pcb  (version   20241229)\n  (generator pcbnew)\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.set_version(20241229);
+
+        let out = tmp_file("pcb_noop_setter_out");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert_eq!(written, src);
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
     fn edit_roundtrip_updates_user_paper_dimensions() {
         let path = tmp_file("pcb_edit_paper_user");
         let src = "(kicad_pcb (version 20260101) (generator pcbnew) (paper A4))\n";
