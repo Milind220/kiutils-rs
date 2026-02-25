@@ -4,13 +4,15 @@ use std::path::Path;
 use kiutils_sexpr::{parse_one, Atom, CstDocument, Node};
 
 use crate::diagnostic::Diagnostic;
+use crate::sections::{parse_paper, parse_title_block, ParsedPaper, ParsedTitleBlock};
 use crate::sexpr_edit::{
-    atom_quoted, atom_symbol, child_index, ensure_root_head_any, list_node,
-    mutate_root_and_refresh, remove_property as remove_property_node, upsert_child_scalar,
-    upsert_node, upsert_property_preserve_tail, upsert_scalar,
+    atom_quoted, atom_symbol, ensure_root_head_any, mutate_root_and_refresh, paper_standard_node,
+    paper_user_node, remove_property as remove_property_node, upsert_node,
+    upsert_property_preserve_tail, upsert_scalar, upsert_section_child_scalar,
 };
 use crate::sexpr_utils::{
-    atom_as_i32, atom_as_string, head_of, second_atom_i32, second_atom_string,
+    atom_as_f64, atom_as_i32, atom_as_string, head_of, second_atom_bool, second_atom_f64,
+    second_atom_i32, second_atom_string,
 };
 use crate::version_diag::collect_version_diagnostics;
 use crate::{Error, UnknownNode, WriteMode};
@@ -200,6 +202,17 @@ pub struct PcbPaperSummary {
     pub orientation: Option<String>,
 }
 
+impl From<ParsedPaper> for PcbPaperSummary {
+    fn from(value: ParsedPaper) -> Self {
+        Self {
+            kind: value.kind,
+            width: value.width,
+            height: value.height,
+            orientation: value.orientation,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PcbTitleBlockSummary {
@@ -208,6 +221,18 @@ pub struct PcbTitleBlockSummary {
     pub revision: Option<String>,
     pub company: Option<String>,
     pub comments: Vec<String>,
+}
+
+impl From<ParsedTitleBlock> for PcbTitleBlockSummary {
+    fn from(value: ParsedTitleBlock) -> Self {
+        Self {
+            title: value.title,
+            date: value.date,
+            revision: value.revision,
+            company: value.company,
+            comments: value.comments,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -308,11 +333,8 @@ impl PcbDocument {
         kind: S,
         orientation: Option<&str>,
     ) -> &mut Self {
-        let mut nodes = vec![atom_symbol("paper".to_string()), atom_quoted(kind.into())];
-        if let Some(orientation) = orientation {
-            nodes.push(atom_symbol(orientation.to_string()));
-        }
-        self.mutate_root_items(|items| upsert_node(items, "paper", list_node(nodes), 1))
+        let node = paper_standard_node(kind.into(), orientation.map(|v| v.to_string()));
+        self.mutate_root_items(|items| upsert_node(items, "paper", node, 1))
     }
 
     pub fn set_paper_user(
@@ -321,39 +343,43 @@ impl PcbDocument {
         height: f64,
         orientation: Option<&str>,
     ) -> &mut Self {
-        let mut nodes = vec![
-            atom_symbol("paper".to_string()),
-            atom_quoted("User".to_string()),
-            atom_symbol(width.to_string()),
-            atom_symbol(height.to_string()),
-        ];
-        if let Some(orientation) = orientation {
-            nodes.push(atom_symbol(orientation.to_string()));
-        }
-        self.mutate_root_items(|items| upsert_node(items, "paper", list_node(nodes), 1))
+        let node = paper_user_node(width, height, orientation.map(|v| v.to_string()));
+        self.mutate_root_items(|items| upsert_node(items, "paper", node, 1))
     }
 
     pub fn set_title<S: Into<String>>(&mut self, title: S) -> &mut Self {
         self.mutate_root_items(|items| {
-            upsert_title_block_scalar(items, "title", atom_quoted(title.into()))
+            upsert_section_child_scalar(items, "title_block", 1, "title", atom_quoted(title.into()))
         })
     }
 
     pub fn set_date<S: Into<String>>(&mut self, date: S) -> &mut Self {
         self.mutate_root_items(|items| {
-            upsert_title_block_scalar(items, "date", atom_quoted(date.into()))
+            upsert_section_child_scalar(items, "title_block", 1, "date", atom_quoted(date.into()))
         })
     }
 
     pub fn set_revision<S: Into<String>>(&mut self, revision: S) -> &mut Self {
         self.mutate_root_items(|items| {
-            upsert_title_block_scalar(items, "rev", atom_quoted(revision.into()))
+            upsert_section_child_scalar(
+                items,
+                "title_block",
+                1,
+                "rev",
+                atom_quoted(revision.into()),
+            )
         })
     }
 
     pub fn set_company<S: Into<String>>(&mut self, company: S) -> &mut Self {
         self.mutate_root_items(|items| {
-            upsert_title_block_scalar(items, "company", atom_quoted(company.into()))
+            upsert_section_child_scalar(
+                items,
+                "title_block",
+                1,
+                "company",
+                atom_quoted(company.into()),
+            )
         })
     }
 
@@ -431,23 +457,6 @@ fn collect_diagnostics(version: Option<i32>) -> Vec<Diagnostic> {
     collect_version_diagnostics(version)
 }
 
-fn upsert_title_block_scalar(items: &mut Vec<Node>, head: &str, value: Node) -> bool {
-    let tb_idx = if let Some(idx) = child_index(items, "title_block", 1) {
-        idx
-    } else {
-        items.push(list_node(vec![atom_symbol("title_block".to_string())]));
-        items.len() - 1
-    };
-
-    let Some(Node::List {
-        items: title_items, ..
-    }) = items.get_mut(tb_idx)
-    else {
-        return false;
-    };
-    upsert_child_scalar(title_items, head, value)
-}
-
 fn parse_ast(cst: &CstDocument) -> PcbAst {
     let mut version = None;
     let mut generator = None;
@@ -520,11 +529,11 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 }
                 Some("paper") => {
                     has_paper = true;
-                    paper = Some(parse_paper_summary(item));
+                    paper = Some(parse_paper(item).into());
                 }
                 Some("title_block") => {
                     has_title_block = true;
-                    title_block = Some(parse_title_block_summary(item));
+                    title_block = Some(parse_title_block(item).into());
                 }
                 Some("layers") => {
                     if let Node::List { items: inner, .. } = item {
@@ -1252,68 +1261,6 @@ fn parse_general_summary(node: &Node) -> PcbGeneralSummary {
     }
 }
 
-fn parse_paper_summary(node: &Node) -> PcbPaperSummary {
-    let Node::List { items, .. } = node else {
-        return PcbPaperSummary {
-            kind: None,
-            width: None,
-            height: None,
-            orientation: None,
-        };
-    };
-
-    let kind = items.get(1).and_then(atom_as_string);
-    let width = items.get(2).and_then(atom_as_f64);
-    let height = items.get(3).and_then(atom_as_f64);
-    let orientation = match items.get(2) {
-        Some(Node::Atom {
-            atom: Atom::Symbol(text),
-            ..
-        }) if text == "portrait" || text == "landscape" => Some(text.clone()),
-        _ => items.get(4).and_then(atom_as_string),
-    };
-
-    PcbPaperSummary {
-        kind,
-        width,
-        height,
-        orientation,
-    }
-}
-
-fn parse_title_block_summary(node: &Node) -> PcbTitleBlockSummary {
-    let mut title = None;
-    let mut date = None;
-    let mut revision = None;
-    let mut company = None;
-    let mut comments = Vec::new();
-    if let Node::List { items, .. } = node {
-        for child in items.iter().skip(1) {
-            match head_of(child) {
-                Some("title") => title = second_atom_string(child),
-                Some("date") => date = second_atom_string(child),
-                Some("rev") => revision = second_atom_string(child),
-                Some("company") => company = second_atom_string(child),
-                Some("comment") => {
-                    if let Node::List { items: inner, .. } = child {
-                        if let Some(comment) = inner.get(2).and_then(atom_as_string) {
-                            comments.push(comment);
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    PcbTitleBlockSummary {
-        title,
-        date,
-        revision,
-        company,
-        comments,
-    }
-}
-
 fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
     let mut has_stackup = false;
     let mut stackup_layer_count = 0usize;
@@ -1362,22 +1309,6 @@ fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
         aux_axis_origin,
         grid_origin,
         setup_tokens,
-    }
-}
-
-fn atom_as_f64(node: &Node) -> Option<f64> {
-    atom_as_string(node).and_then(|s| s.parse::<f64>().ok())
-}
-
-fn second_atom_f64(node: &Node) -> Option<f64> {
-    second_atom_string(node).and_then(|s| s.parse::<f64>().ok())
-}
-
-fn second_atom_bool(node: &Node) -> Option<bool> {
-    match second_atom_string(node).as_deref() {
-        Some("yes") => Some(true),
-        Some("no") => Some(false),
-        _ => None,
     }
 }
 

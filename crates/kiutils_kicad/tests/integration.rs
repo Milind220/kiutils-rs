@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use kiutils_kicad::{
-    DesignRulesFile, Error, FootprintFile, FpLibTableFile, PcbFile, ProjectFile, SymbolLibFile,
-    WriteMode,
+    DesignRulesFile, Error, FootprintFile, FpLibTableFile, PcbFile, ProjectFile, SchematicFile,
+    SymbolLibFile, WriteMode,
 };
 
 fn fixture(name: &str) -> PathBuf {
@@ -122,6 +122,24 @@ fn symbol_fixture_roundtrip_lossless_and_unknown() {
 }
 
 #[test]
+fn schematic_fixture_roundtrip_lossless_and_unknown() {
+    let src_path = fixture("sample.kicad_sch");
+    let src = fs::read_to_string(&src_path).expect("read fixture");
+
+    let doc = SchematicFile::read(&src_path).expect("parse");
+    assert_eq!(doc.ast().symbol_count, 1);
+    assert_eq!(doc.ast().wire_count, 1);
+    assert_eq!(doc.ast().unknown_nodes.len(), 1);
+
+    let out = tmp_file("sch", "kicad_sch");
+    doc.write(&out).expect("write");
+    let got = fs::read_to_string(&out).expect("read out");
+    assert_eq!(got, src);
+
+    let _ = fs::remove_file(out);
+}
+
+#[test]
 fn pcb_multi_unknown_roundtrip_lossless() {
     let src = "(kicad_pcb (version 20260101) (generator pcbnew) (mystery_a 1) (mystery_b \"x\"))\n";
     let path = tmp_file("pcb_multi_unknown", "kicad_pcb");
@@ -161,6 +179,20 @@ fn symbol_rejects_malformed_root() {
     let err = SymbolLibFile::read(&path).expect_err("must fail");
     match err {
         Error::Validation(msg) => assert!(msg.contains("expected root token `kicad_symbol_lib`")),
+        other => panic!("unexpected error: {other}"),
+    }
+
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn schematic_rejects_malformed_root() {
+    let path = tmp_file("schematic_bad_root", "kicad_sch");
+    fs::write(&path, "(foo (version 20260101))\n").expect("write fixture");
+
+    let err = SchematicFile::read(&path).expect_err("must fail");
+    match err {
+        Error::Validation(msg) => assert!(msg.contains("expected root token `kicad_sch`")),
         other => panic!("unexpected error: {other}"),
     }
 

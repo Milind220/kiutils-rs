@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use kiutils_kicad::{
-    DesignRulesFile, FootprintFile, FpLibTableFile, PcbFile, ProjectFile, WriteMode,
+    DesignRulesFile, FootprintFile, FpLibTableFile, PcbFile, ProjectFile, SchematicFile, WriteMode,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -15,6 +15,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let footprint = FootprintFile::read(base.join("sample.kicad_mod"))?;
     println!("footprint version: {:?}", footprint.ast().version);
+
+    let schematic = SchematicFile::read(base.join("sample.kicad_sch"))?;
+    println!("schematic version: {:?}", schematic.ast().version);
+    println!(
+        "schematic unknown nodes: {}",
+        schematic.ast().unknown_nodes.len()
+    );
 
     let table = FpLibTableFile::read(base.join("fp-lib-table"))?;
     println!("fp libs: {}", table.ast().library_count);

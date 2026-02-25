@@ -3,6 +3,7 @@
 //! Scope (v1):
 //! - `.kicad_pcb`
 //! - `.kicad_mod`
+//! - `.kicad_sch`
 //! - `.kicad_sym`
 //! - `fp-lib-table`
 //! - `.kicad_dru`
@@ -25,6 +26,8 @@ mod footprint;
 mod lib_table;
 mod pcb;
 mod project;
+mod schematic;
+mod sections;
 mod sexpr_edit;
 mod sexpr_utils;
 mod symbol;
@@ -45,6 +48,10 @@ pub use pcb::{
     PcbSegmentSummary, PcbSetupSummary, PcbTargetSummary, PcbViaSummary, PcbZoneSummary,
 };
 pub use project::{ProjectAst, ProjectDocument, ProjectExtra, ProjectFile};
+pub use schematic::{
+    SchematicAst, SchematicDocument, SchematicFile, SchematicPaperSummary,
+    SchematicTitleBlockSummary,
+};
 pub use symbol::{SymbolLibAst, SymbolLibDocument, SymbolLibFile, SymbolSummary};
 pub use unknown::{UnknownField, UnknownNode};
 pub use version::{KiCadSeries, VersionPolicy};

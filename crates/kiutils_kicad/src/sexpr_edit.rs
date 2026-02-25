@@ -107,6 +107,30 @@ pub(crate) fn upsert_child_scalar(items: &mut Vec<Node>, head: &str, value: Node
     upsert_scalar(items, head, value, 1)
 }
 
+pub(crate) fn upsert_section_child_scalar(
+    items: &mut Vec<Node>,
+    section_head: &str,
+    section_skip: usize,
+    child_head: &str,
+    child_value: Node,
+) -> bool {
+    let section_idx = if let Some(idx) = child_index(items, section_head, section_skip) {
+        idx
+    } else {
+        items.push(list_node(vec![atom_symbol(section_head.to_string())]));
+        items.len() - 1
+    };
+
+    let Some(Node::List {
+        items: section_items,
+        ..
+    }) = items.get_mut(section_idx)
+    else {
+        return false;
+    };
+    upsert_child_scalar(section_items, child_head, child_value)
+}
+
 pub(crate) fn property_node(key: &str, value: &str) -> Node {
     list_node(vec![
         atom_symbol("property".to_string()),
@@ -178,6 +202,27 @@ pub(crate) fn remove_property(items: &mut Vec<Node>, key: &str, skip: usize) -> 
     } else {
         false
     }
+}
+
+pub(crate) fn paper_standard_node(kind: String, orientation: Option<String>) -> Node {
+    let mut nodes = vec![atom_symbol("paper".to_string()), atom_quoted(kind)];
+    if let Some(orientation) = orientation {
+        nodes.push(atom_symbol(orientation));
+    }
+    list_node(nodes)
+}
+
+pub(crate) fn paper_user_node(width: f64, height: f64, orientation: Option<String>) -> Node {
+    let mut nodes = vec![
+        atom_symbol("paper".to_string()),
+        atom_quoted("User".to_string()),
+        atom_symbol(width.to_string()),
+        atom_symbol(height.to_string()),
+    ];
+    if let Some(orientation) = orientation {
+        nodes.push(atom_symbol(orientation));
+    }
+    list_node(nodes)
 }
 
 pub(crate) fn canonicalize_and_reparse(cst: &mut CstDocument) {

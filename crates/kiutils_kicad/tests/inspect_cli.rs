@@ -93,6 +93,40 @@ fn inspect_footprint_text_contract_smoke() {
 }
 
 #[test]
+fn inspect_schematic_json_contract_smoke() {
+    let path = fixture("sample.kicad_sch");
+    let out = run_inspect(&[
+        path.to_str().expect("path str"),
+        "--type",
+        "schematic",
+        "--json",
+    ]);
+    let v: Value = serde_json::from_str(out.trim()).expect("json output");
+    let o = v.as_object().expect("json object");
+
+    assert_eq!(o.get("kind"), Some(&Value::String("schematic".to_string())));
+    assert_eq!(
+        o.get("path"),
+        Some(&Value::String(path.to_string_lossy().to_string()))
+    );
+    assert_eq!(o.get("symbol_count"), Some(&Value::from(1)));
+    assert_eq!(o.get("wire_count"), Some(&Value::from(1)));
+    assert_eq!(o.get("unknown_count"), Some(&Value::from(1)));
+}
+
+#[test]
+fn inspect_schematic_text_contract_smoke() {
+    let path = fixture("sample.kicad_sch");
+    let out = run_inspect(&[path.to_str().expect("path str"), "--type", "schematic"]);
+
+    assert!(out.contains("kind: schematic"));
+    assert!(out.contains(&format!("path: {}", path.display())));
+    assert!(out.contains("symbol_count: 1"));
+    assert!(out.contains("wire_count: 1"));
+    assert!(out.contains("unknown_count: 1"));
+}
+
+#[test]
 fn inspect_symbol_json_contract_smoke() {
     let path = fixture("sample.kicad_sym");
     let out = run_inspect(&[

@@ -5,6 +5,7 @@ Rust-native, sync-first KiCad parser/formatter with lossless round-trip defaults
 Scope (v1):
 - `.kicad_pcb`
 - `.kicad_mod`
+- `.kicad_sch`
 - `.kicad_sym`
 - `fp-lib-table`
 - `.kicad_dru`
@@ -16,6 +17,7 @@ Current status:
   - `kiutils_kicad`: typed KiCad API layer
 - Implemented: initial `PcbFile::read` path with lossless write-back and tests
 - Implemented: typed readers for PCB/footprint/lib-table/design-rules/project
+- Implemented: typed reader for schematics (`.kicad_sch`)
 - Implemented: typed reader for symbol libraries (`.kicad_sym`)
 - Implemented: unknown token/field capture and `WriteMode::{Lossless, Canonical}`
 
@@ -57,8 +59,7 @@ cargo run -p kiutils_kicad --bin kiutils-inspect -- <path>
 ```
 
 Flags:
-- `--type auto|pcb|footprint|fplib|dru|project`
-- `--type auto|pcb|footprint|symbol|fplib|dru|project`
+- `--type auto|pcb|footprint|schematic|sch|symbol|fplib|dru|project`
 - `--json`
 - `--show-cst`
 - `--show-canonical`
@@ -128,6 +129,32 @@ Runnable example:
 
 ```bash
 cargo run -p kiutils_kicad --example pcb_roundtrip -- input.kicad_pcb output.kicad_pcb
+```
+
+## Schematic read/modify/write
+
+```rust
+use kiutils_kicad::SchematicFile;
+
+let mut doc = SchematicFile::read("input.kicad_sch")?;
+doc.set_version(20260101)
+    .set_generator("eeschema")
+    .set_generator_version("9.0")
+    .set_uuid("f5f10a8b-1d4a-4de6-9a77-5fd4d17f3cc5")
+    .set_paper_standard("A4", Some("portrait"))
+    .set_title("Demo Schematic")
+    .set_date("2026-02-25")
+    .set_revision("B")
+    .set_company("Lords");
+
+doc.write("output.kicad_sch")?;
+```
+
+Runnable examples:
+
+```bash
+cargo run -p kiutils_kicad --example schematic_roundtrip -- input.kicad_sch output.kicad_sch
+cargo run -p kiutils_kicad --example schematic_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/schematics
 ```
 
 ## Symbol library read/modify/write

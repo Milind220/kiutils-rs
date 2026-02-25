@@ -1,0 +1,1 @@
+(kicad_sch (version 20260101) (generator "eeschema") (uuid "u1") (paper "A4") (lib_symbols (symbol "Device:R")) (symbol (lib_id "Device:R")) (wire (pts (xy 0 0) (xy 1 1))) (future_sch 1 2))
