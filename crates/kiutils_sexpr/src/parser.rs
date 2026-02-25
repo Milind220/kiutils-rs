@@ -88,7 +88,11 @@ pub enum ParseError {
     UnexpectedToken(usize),
     #[error("expected single root, got {0}")]
     ExpectedSingleRoot(usize),
+    #[error("maximum nesting depth exceeded at byte {0}")]
+    MaxNestingExceeded(usize),
 }
+
+const MAX_NESTING_DEPTH: usize = 2048;
 
 struct P<'a> {
     s: &'a [u8],
@@ -115,19 +119,26 @@ impl<'a> P<'a> {
     }
 
     fn parse_node(&mut self) -> Result<Node, ParseError> {
+        self.parse_node_with_depth(0)
+    }
+
+    fn parse_node_with_depth(&mut self, depth: usize) -> Result<Node, ParseError> {
         self.bump_ws();
         if self.i >= self.s.len() {
             return Err(ParseError::UnexpectedEof);
         }
         match self.s[self.i] {
-            b'(' => self.parse_list(),
+            b'(' => self.parse_list(depth),
             b')' => Err(ParseError::UnexpectedToken(self.i)),
             b'"' => self.parse_quoted(),
             _ => self.parse_symbol(),
         }
     }
 
-    fn parse_list(&mut self) -> Result<Node, ParseError> {
+    fn parse_list(&mut self, depth: usize) -> Result<Node, ParseError> {
+        if depth >= MAX_NESTING_DEPTH {
+            return Err(ParseError::MaxNestingExceeded(self.i));
+        }
         let start = self.i;
         self.i += 1;
         let mut items = Vec::new();
@@ -143,7 +154,7 @@ impl<'a> P<'a> {
                     span: Span { start, end: self.i },
                 });
             }
-            items.push(self.parse_node()?);
+            items.push(self.parse_node_with_depth(depth + 1)?);
         }
     }
 
@@ -258,6 +269,22 @@ mod tests {
             doc.to_canonical_string(),
             "(kicad_pcb (version 20260101))\n"
         );
+    }
+
+    #[test]
+    fn parse_deeply_nested_input_hits_depth_limit() {
+        let depth = MAX_NESTING_DEPTH + 16;
+        let mut src = String::with_capacity(depth * 2 + 1);
+        for _ in 0..depth {
+            src.push('(');
+        }
+        src.push('x');
+        for _ in 0..depth {
+            src.push(')');
+        }
+
+        let err = parse_one(&src).expect_err("must reject excessive nesting");
+        assert!(matches!(err, ParseError::MaxNestingExceeded(_)));
     }
 
     #[test]
