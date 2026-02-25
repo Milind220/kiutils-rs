@@ -3,9 +3,18 @@ use std::path::Path;
 
 use kiutils_sexpr::{parse_one, Atom, CstDocument, Node};
 
-use crate::diagnostic::{Diagnostic, Severity};
-use crate::sexpr_utils::{atom_as_i32, atom_as_string, head_of, second_atom_i32, second_atom_string};
-use crate::version::VersionPolicy;
+use crate::diagnostic::Diagnostic;
+use crate::sections::{parse_paper, parse_title_block, ParsedPaper, ParsedTitleBlock};
+use crate::sexpr_edit::{
+    atom_quoted, atom_symbol, ensure_root_head_any, mutate_root_and_refresh, paper_standard_node,
+    paper_user_node, remove_property as remove_property_node, upsert_node,
+    upsert_property_preserve_tail, upsert_scalar, upsert_section_child_scalar,
+};
+use crate::sexpr_utils::{
+    atom_as_f64, atom_as_i32, atom_as_string, head_of, second_atom_bool, second_atom_f64,
+    second_atom_i32, second_atom_string,
+};
+use crate::version_diag::collect_version_diagnostics;
 use crate::{Error, UnknownNode, WriteMode};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,6 +202,17 @@ pub struct PcbPaperSummary {
     pub orientation: Option<String>,
 }
 
+impl From<ParsedPaper> for PcbPaperSummary {
+    fn from(value: ParsedPaper) -> Self {
+        Self {
+            kind: value.kind,
+            width: value.width,
+            height: value.height,
+            orientation: value.orientation,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PcbTitleBlockSummary {
@@ -201,6 +221,18 @@ pub struct PcbTitleBlockSummary {
     pub revision: Option<String>,
     pub company: Option<String>,
     pub comments: Vec<String>,
+}
+
+impl From<ParsedTitleBlock> for PcbTitleBlockSummary {
+    fn from(value: ParsedTitleBlock) -> Self {
+        Self {
+            title: value.title,
+            date: value.date,
+            revision: value.revision,
+            company: value.company,
+            comments: value.comments,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -273,6 +305,99 @@ impl PcbDocument {
         &mut self.ast
     }
 
+    pub fn set_version(&mut self, version: i32) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_scalar(items, "version", atom_symbol(version.to_string()), 1)
+        })
+    }
+
+    pub fn set_generator<S: Into<String>>(&mut self, generator: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_scalar(items, "generator", atom_symbol(generator.into()), 1)
+        })
+    }
+
+    pub fn set_generator_version<S: Into<String>>(&mut self, generator_version: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_scalar(
+                items,
+                "generator_version",
+                atom_quoted(generator_version.into()),
+                1,
+            )
+        })
+    }
+
+    pub fn set_paper_standard<S: Into<String>>(
+        &mut self,
+        kind: S,
+        orientation: Option<&str>,
+    ) -> &mut Self {
+        let node = paper_standard_node(kind.into(), orientation.map(|v| v.to_string()));
+        self.mutate_root_items(|items| upsert_node(items, "paper", node, 1))
+    }
+
+    pub fn set_paper_user(
+        &mut self,
+        width: f64,
+        height: f64,
+        orientation: Option<&str>,
+    ) -> &mut Self {
+        let node = paper_user_node(width, height, orientation.map(|v| v.to_string()));
+        self.mutate_root_items(|items| upsert_node(items, "paper", node, 1))
+    }
+
+    pub fn set_title<S: Into<String>>(&mut self, title: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_section_child_scalar(items, "title_block", 1, "title", atom_quoted(title.into()))
+        })
+    }
+
+    pub fn set_date<S: Into<String>>(&mut self, date: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_section_child_scalar(items, "title_block", 1, "date", atom_quoted(date.into()))
+        })
+    }
+
+    pub fn set_revision<S: Into<String>>(&mut self, revision: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_section_child_scalar(
+                items,
+                "title_block",
+                1,
+                "rev",
+                atom_quoted(revision.into()),
+            )
+        })
+    }
+
+    pub fn set_company<S: Into<String>>(&mut self, company: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_section_child_scalar(
+                items,
+                "title_block",
+                1,
+                "company",
+                atom_quoted(company.into()),
+            )
+        })
+    }
+
+    pub fn upsert_property<K: Into<String>, V: Into<String>>(
+        &mut self,
+        key: K,
+        value: V,
+    ) -> &mut Self {
+        let key = key.into();
+        let value = value.into();
+        self.mutate_root_items(|items| upsert_property_preserve_tail(items, &key, &value, 1))
+    }
+
+    pub fn remove_property(&mut self, key: &str) -> &mut Self {
+        let key = key.to_string();
+        self.mutate_root_items(|items| remove_property_node(items, &key, 1))
+    }
+
     pub fn cst(&self) -> &CstDocument {
         &self.cst
     }
@@ -292,6 +417,21 @@ impl PcbDocument {
         }
         Ok(())
     }
+
+    fn mutate_root_items<F>(&mut self, mutate: F) -> &mut Self
+    where
+        F: FnOnce(&mut Vec<Node>) -> bool,
+    {
+        mutate_root_and_refresh(
+            &mut self.cst,
+            &mut self.ast,
+            &mut self.diagnostics,
+            mutate,
+            parse_ast,
+            |_cst, ast| collect_diagnostics(ast.version),
+        );
+        self
+    }
 }
 
 pub struct PcbFile;
@@ -300,10 +440,10 @@ impl PcbFile {
     pub fn read<P: AsRef<Path>>(path: P) -> Result<PcbDocument, Error> {
         let raw = fs::read_to_string(path)?;
         let cst = parse_one(&raw)?;
-        ensure_head(&cst, "kicad_pcb")?;
+        ensure_root_head_any(&cst, &["kicad_pcb"])?;
 
         let ast = parse_ast(&cst);
-        let diagnostics = validate_version(ast.version)?;
+        let diagnostics = collect_diagnostics(ast.version);
 
         Ok(PcbDocument {
             ast,
@@ -313,29 +453,8 @@ impl PcbFile {
     }
 }
 
-fn ensure_head(cst: &CstDocument, expected: &str) -> Result<(), Error> {
-    let head = cst
-        .nodes
-        .first()
-        .and_then(|n| match n {
-            Node::List { items, .. } => items.first(),
-            _ => None,
-        })
-        .and_then(|n| match n {
-            Node::Atom {
-                atom: Atom::Symbol(s),
-                ..
-            } => Some(s.as_str()),
-            _ => None,
-        });
-
-    match head {
-        Some(h) if h == expected => Ok(()),
-        Some(h) => Err(Error::Validation(format!(
-            "expected root token `{expected}`, got `{h}`"
-        ))),
-        None => Err(Error::Validation("missing root token".to_string())),
-    }
+fn collect_diagnostics(version: Option<i32>) -> Vec<Diagnostic> {
+    collect_version_diagnostics(version)
 }
 
 fn parse_ast(cst: &CstDocument) -> PcbAst {
@@ -410,11 +529,11 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 }
                 Some("paper") => {
                     has_paper = true;
-                    paper = Some(parse_paper_summary(item));
+                    paper = Some(parse_paper(item).into());
                 }
                 Some("title_block") => {
                     has_title_block = true;
-                    title_block = Some(parse_title_block_summary(item));
+                    title_block = Some(parse_title_block(item).into());
                 }
                 Some("layers") => {
                     if let Node::List { items: inner, .. } = item {
@@ -1113,7 +1232,10 @@ fn parse_property(node: &Node) -> Option<PcbProperty> {
     let Node::List { items, .. } = node else {
         return None;
     };
-    if !matches!(items.first().and_then(atom_as_string).as_deref(), Some("property")) {
+    if !matches!(
+        items.first().and_then(atom_as_string).as_deref(),
+        Some("property")
+    ) {
         return None;
     }
     let key = items.get(1).and_then(atom_as_string)?;
@@ -1139,68 +1261,6 @@ fn parse_general_summary(node: &Node) -> PcbGeneralSummary {
     }
 }
 
-fn parse_paper_summary(node: &Node) -> PcbPaperSummary {
-    let Node::List { items, .. } = node else {
-        return PcbPaperSummary {
-            kind: None,
-            width: None,
-            height: None,
-            orientation: None,
-        };
-    };
-
-    let kind = items.get(1).and_then(atom_as_string);
-    let width = items.get(2).and_then(atom_as_f64);
-    let height = items.get(3).and_then(atom_as_f64);
-    let orientation = match items.get(2) {
-        Some(Node::Atom {
-            atom: Atom::Symbol(text),
-            ..
-        }) if text == "portrait" || text == "landscape" => Some(text.clone()),
-        _ => items.get(4).and_then(atom_as_string),
-    };
-
-    PcbPaperSummary {
-        kind,
-        width,
-        height,
-        orientation,
-    }
-}
-
-fn parse_title_block_summary(node: &Node) -> PcbTitleBlockSummary {
-    let mut title = None;
-    let mut date = None;
-    let mut revision = None;
-    let mut company = None;
-    let mut comments = Vec::new();
-    if let Node::List { items, .. } = node {
-        for child in items.iter().skip(1) {
-            match head_of(child) {
-                Some("title") => title = second_atom_string(child),
-                Some("date") => date = second_atom_string(child),
-                Some("rev") => revision = second_atom_string(child),
-                Some("company") => company = second_atom_string(child),
-                Some("comment") => {
-                    if let Node::List { items: inner, .. } = child {
-                        if let Some(comment) = inner.get(2).and_then(atom_as_string) {
-                            comments.push(comment);
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    PcbTitleBlockSummary {
-        title,
-        date,
-        revision,
-        company,
-        comments,
-    }
-}
-
 fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
     let mut has_stackup = false;
     let mut stackup_layer_count = 0usize;
@@ -1218,7 +1278,11 @@ fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
                 match head {
                     "stackup" => {
                         has_stackup = true;
-                        if let Node::List { items: stackup_items, .. } = child {
+                        if let Node::List {
+                            items: stackup_items,
+                            ..
+                        } = child
+                        {
                             stackup_layer_count = stackup_items
                                 .iter()
                                 .filter(|n| matches!(head_of(n), Some("layer")))
@@ -1248,22 +1312,6 @@ fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
     }
 }
 
-fn atom_as_f64(node: &Node) -> Option<f64> {
-    atom_as_string(node).and_then(|s| s.parse::<f64>().ok())
-}
-
-fn second_atom_f64(node: &Node) -> Option<f64> {
-    second_atom_string(node).and_then(|s| s.parse::<f64>().ok())
-}
-
-fn second_atom_bool(node: &Node) -> Option<bool> {
-    match second_atom_string(node).as_deref() {
-        Some("yes") => Some(true),
-        Some("no") => Some(false),
-        _ => None,
-    }
-}
-
 fn parse_xy(node: &Node) -> Option<[f64; 2]> {
     let Node::List { items, .. } = node else {
         return None;
@@ -1284,34 +1332,6 @@ fn parse_xy_and_angle(node: &Node) -> (Option<[f64; 2]>, Option<f64>) {
         (Some(x), Some(y)) => (Some([x, y]), rot),
         _ => (None, rot),
     }
-}
-
-fn validate_version(version: Option<i32>) -> Result<Vec<Diagnostic>, Error> {
-    let policy = VersionPolicy::default();
-    let mut diagnostics = Vec::new();
-
-    if let Some(v) = version {
-        if policy.reject_older && !policy.accepts(v) {
-            return Err(Error::Validation(format!(
-                "unsupported KiCad version {v}; expected v9+ format"
-            )));
-        }
-
-        if policy.is_future_for_target(v) {
-            diagnostics.push(Diagnostic {
-                severity: Severity::Warning,
-                code: "future_format",
-                message: format!(
-                    "version {v} is newer than target {:?}; keeping lossless CST for compatibility",
-                    policy.target
-                ),
-                span: None,
-                hint: Some("consider newer parser coverage for this token set".to_string()),
-            });
-        }
-    }
-
-    Ok(diagnostics)
 }
 
 #[cfg(test)]
@@ -1365,15 +1385,13 @@ mod tests {
     }
 
     #[test]
-    fn read_rejects_old_version() {
+    fn read_warns_on_legacy_version() {
         let path = tmp_file("pcb_old_version");
         fs::write(&path, "(kicad_pcb (version 20220101))\n").expect("write fixture");
 
-        let err = PcbFile::read(&path).expect_err("must fail");
-        match err {
-            Error::Validation(msg) => assert!(msg.contains("v9+")),
-            other => panic!("unexpected error: {other}"),
-        }
+        let doc = PcbFile::read(&path).expect("read");
+        assert_eq!(doc.diagnostics().len(), 1);
+        assert_eq!(doc.diagnostics()[0].code, "legacy_format");
 
         let _ = fs::remove_file(path);
     }
@@ -1413,7 +1431,10 @@ mod tests {
 
         let doc = PcbFile::read(&path).expect("read");
         assert_eq!(doc.ast().unknown_nodes.len(), 1);
-        assert_eq!(doc.ast().unknown_nodes[0].head.as_deref(), Some("mystery_token"));
+        assert_eq!(
+            doc.ast().unknown_nodes[0].head.as_deref(),
+            Some("mystery_token")
+        );
 
         let out = tmp_file("pcb_unknown_out");
         doc.write(&out).expect("write");
@@ -1459,10 +1480,7 @@ mod tests {
             Some("portrait".to_string())
         );
         assert_eq!(
-            doc.ast()
-                .title_block
-                .as_ref()
-                .and_then(|t| t.title.clone()),
+            doc.ast().title_block.as_ref().and_then(|t| t.title.clone()),
             Some("Demo".to_string())
         );
         assert_eq!(
@@ -1477,10 +1495,19 @@ mod tests {
             Some("c1".to_string())
         );
         assert_eq!(doc.ast().setup.as_ref().map(|s| s.has_stackup), Some(true));
-        assert_eq!(doc.ast().setup.as_ref().map(|s| s.stackup_layer_count), Some(2));
-        assert_eq!(doc.ast().setup.as_ref().map(|s| s.has_plot_settings), Some(true));
         assert_eq!(
-            doc.ast().setup.as_ref().and_then(|s| s.pad_to_mask_clearance),
+            doc.ast().setup.as_ref().map(|s| s.stackup_layer_count),
+            Some(2)
+        );
+        assert_eq!(
+            doc.ast().setup.as_ref().map(|s| s.has_plot_settings),
+            Some(true)
+        );
+        assert_eq!(
+            doc.ast()
+                .setup
+                .as_ref()
+                .and_then(|s| s.pad_to_mask_clearance),
             Some(0.1)
         );
         assert_eq!(doc.ast().net_count, 1);
@@ -1568,7 +1595,10 @@ mod tests {
         let doc = PcbFile::read(&path).expect("read");
         assert_eq!(doc.ast().dimension_count, 1);
         assert_eq!(doc.ast().dimensions.len(), 1);
-        assert_eq!(doc.ast().dimensions[0].dimension_type.as_deref(), Some("aligned"));
+        assert_eq!(
+            doc.ast().dimensions[0].dimension_type.as_deref(),
+            Some("aligned")
+        );
         assert_eq!(doc.ast().dimensions[0].layer.as_deref(), Some("Cmts.User"));
         assert!(doc.ast().dimensions[0].format_present);
         assert_eq!(doc.ast().dimensions[0].gr_text_count, 1);
@@ -1596,5 +1626,137 @@ mod tests {
         );
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn edit_roundtrip_updates_core_fields_and_preserves_unknowns() {
+        let path = tmp_file("pcb_edit_roundtrip");
+        let src = "(kicad_pcb (version 20241229) (generator pcbnew)\n  (paper \"A4\")\n  (title_block (title \"Old\") (date \"2025-01-01\") (rev \"A\") (company \"OldCo\"))\n  (property \"Owner\" \"Milind\")\n  (future_token 1 2)\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.set_version(20260101)
+            .set_generator("kiutils")
+            .set_generator_version("dev")
+            .set_paper_standard("A3", Some("portrait"))
+            .set_title("Roundtrip Demo")
+            .set_date("2026-02-25")
+            .set_revision("B")
+            .set_company("Lords")
+            .upsert_property("Owner", "Milind Sharma")
+            .upsert_property("Build", "2")
+            .remove_property("DoesNotExist");
+
+        let out = tmp_file("pcb_edit_roundtrip_out");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert!(written.contains("(future_token 1 2)"));
+
+        let reread = PcbFile::read(&out).expect("reread");
+        assert_eq!(reread.ast().version, Some(20260101));
+        assert_eq!(reread.ast().generator.as_deref(), Some("kiutils"));
+        assert_eq!(reread.ast().generator_version.as_deref(), Some("dev"));
+        assert_eq!(
+            reread.ast().paper.as_ref().and_then(|p| p.kind.clone()),
+            Some("A3".to_string())
+        );
+        assert_eq!(
+            reread
+                .ast()
+                .paper
+                .as_ref()
+                .and_then(|p| p.orientation.clone()),
+            Some("portrait".to_string())
+        );
+        assert_eq!(
+            reread
+                .ast()
+                .title_block
+                .as_ref()
+                .and_then(|t| t.title.clone()),
+            Some("Roundtrip Demo".to_string())
+        );
+        assert_eq!(reread.ast().property_count, 2);
+        assert_eq!(reread.ast().unknown_nodes.len(), 1);
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
+    fn lossless_write_preserves_unrelated_formatting_for_targeted_edit() {
+        let path = tmp_file("pcb_lossless_targeted_edit");
+        let src =
+            "(kicad_pcb  (version   20241229)\n  (generator pcbnew)\n  (future_token   1   2)\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.set_version(20260101);
+
+        let out = tmp_file("pcb_lossless_targeted_edit_out");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert_eq!(
+            written,
+            "(kicad_pcb  (version 20260101)\n  (generator pcbnew)\n  (future_token   1   2)\n)\n"
+        );
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
+    fn edit_roundtrip_updates_user_paper_dimensions() {
+        let path = tmp_file("pcb_edit_paper_user");
+        let src = "(kicad_pcb (version 20260101) (generator pcbnew) (paper A4))\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.set_paper_user(100.0, 80.0, Some("landscape"));
+
+        let out = tmp_file("pcb_edit_paper_user_out");
+        doc.write(&out).expect("write");
+        let reread = PcbFile::read(&out).expect("reread");
+        assert_eq!(
+            reread.ast().paper.as_ref().and_then(|p| p.kind.clone()),
+            Some("User".to_string())
+        );
+        assert_eq!(
+            reread.ast().paper.as_ref().and_then(|p| p.width),
+            Some(100.0)
+        );
+        assert_eq!(
+            reread.ast().paper.as_ref().and_then(|p| p.height),
+            Some(80.0)
+        );
+        assert_eq!(
+            reread
+                .ast()
+                .paper
+                .as_ref()
+                .and_then(|p| p.orientation.clone()),
+            Some("landscape".to_string())
+        );
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
+    fn upsert_property_preserves_existing_extra_children() {
+        let path = tmp_file("pcb_property_preserve_extra");
+        let src = "(kicad_pcb (version 20260101) (generator pcbnew)\n  (property \"Owner\" \"Old\" (at 1 2 0))\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = PcbFile::read(&path).expect("read");
+        doc.upsert_property("Owner", "New");
+
+        let out = tmp_file("pcb_property_preserve_extra_out");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert!(written.contains("(property \"Owner\" \"New\" (at 1 2 0))"));
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
     }
 }

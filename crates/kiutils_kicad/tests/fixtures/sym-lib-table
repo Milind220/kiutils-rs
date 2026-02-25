@@ -1,0 +1,5 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "S") (type "KiCad") (uri "x") (options "") (descr ""))
+  (x_future_sym_table yes)
+)

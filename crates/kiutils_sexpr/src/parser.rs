@@ -140,10 +140,7 @@ impl<'a> P<'a> {
                 self.i += 1;
                 return Ok(Node::List {
                     items,
-                    span: Span {
-                        start,
-                        end: self.i,
-                    },
+                    span: Span { start, end: self.i },
                 });
             }
             items.push(self.parse_node()?);
@@ -169,10 +166,7 @@ impl<'a> P<'a> {
                 b'"' => {
                     return Ok(Node::Atom {
                         atom: Atom::Quoted(out),
-                        span: Span {
-                            start,
-                            end: self.i,
-                        },
+                        span: Span { start, end: self.i },
                     });
                 }
                 _ => out.push(b as char),
@@ -197,10 +191,7 @@ impl<'a> P<'a> {
             .map_err(|_| ParseError::UnexpectedToken(start))?;
         Ok(Node::Atom {
             atom: Atom::Symbol(sym),
-            span: Span {
-                start,
-                end: self.i,
-            },
+            span: Span { start, end: self.i },
         })
     }
 }
@@ -261,6 +252,9 @@ mod tests {
     #[test]
     fn canonical_prints_normalized() {
         let doc = parse_one("(kicad_pcb   (version 20260101)   )").expect("parse");
-        assert_eq!(doc.to_canonical_string(), "(kicad_pcb (version 20260101))\n");
+        assert_eq!(
+            doc.to_canonical_string(),
+            "(kicad_pcb (version 20260101))\n"
+        );
     }
 }

@@ -1,13 +1,18 @@
 use std::fs;
 use std::path::Path;
 
-use kiutils_sexpr::{parse_one, Atom, CstDocument, Node};
+use kiutils_sexpr::{parse_one, CstDocument, Node};
 
 use crate::diagnostic::{Diagnostic, Severity};
+use crate::sexpr_edit::{
+    atom_quoted, atom_symbol, ensure_root_head_any, mutate_root_and_refresh,
+    remove_property as remove_property_node, root_head, upsert_property_preserve_tail,
+    upsert_scalar,
+};
 use crate::sexpr_utils::{
     atom_as_string, head_of, list_child_head_count, second_atom_i32, second_atom_string,
 };
-use crate::version::VersionPolicy;
+use crate::version_diag::collect_version_diagnostics;
 use crate::{Error, UnknownNode, WriteMode};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,6 +20,7 @@ use crate::{Error, UnknownNode, WriteMode};
 pub struct FootprintAst {
     pub lib_id: Option<String>,
     pub version: Option<i32>,
+    pub tedit: Option<String>,
     pub generator: Option<String>,
     pub generator_version: Option<String>,
     pub layer: Option<String>,
@@ -45,6 +51,7 @@ pub struct FootprintAst {
     pub fp_curve_count: usize,
     pub fp_text_count: usize,
     pub fp_text_box_count: usize,
+    pub dimension_count: usize,
     pub graphic_count: usize,
     pub unknown_nodes: Vec<UnknownNode>,
 }
@@ -63,6 +70,82 @@ impl FootprintDocument {
 
     pub fn ast_mut(&mut self) -> &mut FootprintAst {
         &mut self.ast
+    }
+
+    pub fn set_lib_id<S: Into<String>>(&mut self, lib_id: S) -> &mut Self {
+        let lib_id = lib_id.into();
+        self.mutate_root_items(|items| {
+            let value = atom_quoted(lib_id);
+            if let Some(current) = items.get(1) {
+                if *current == value {
+                    false
+                } else {
+                    items[1] = value;
+                    true
+                }
+            } else {
+                items.push(value);
+                true
+            }
+        })
+    }
+
+    pub fn set_version(&mut self, version: i32) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_scalar(items, "version", atom_symbol(version.to_string()), 2)
+        })
+    }
+
+    pub fn set_generator<S: Into<String>>(&mut self, generator: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_scalar(items, "generator", atom_symbol(generator.into()), 2)
+        })
+    }
+
+    pub fn set_generator_version<S: Into<String>>(&mut self, generator_version: S) -> &mut Self {
+        self.mutate_root_items(|items| {
+            upsert_scalar(
+                items,
+                "generator_version",
+                atom_quoted(generator_version.into()),
+                2,
+            )
+        })
+    }
+
+    pub fn set_layer<S: Into<String>>(&mut self, layer: S) -> &mut Self {
+        self.mutate_root_items(|items| upsert_scalar(items, "layer", atom_quoted(layer.into()), 2))
+    }
+
+    pub fn set_descr<S: Into<String>>(&mut self, descr: S) -> &mut Self {
+        self.mutate_root_items(|items| upsert_scalar(items, "descr", atom_quoted(descr.into()), 2))
+    }
+
+    pub fn set_tags<S: Into<String>>(&mut self, tags: S) -> &mut Self {
+        self.mutate_root_items(|items| upsert_scalar(items, "tags", atom_quoted(tags.into()), 2))
+    }
+
+    pub fn set_reference<S: Into<String>>(&mut self, value: S) -> &mut Self {
+        self.upsert_property("Reference", value)
+    }
+
+    pub fn set_value<S: Into<String>>(&mut self, value: S) -> &mut Self {
+        self.upsert_property("Value", value)
+    }
+
+    pub fn upsert_property<K: Into<String>, V: Into<String>>(
+        &mut self,
+        key: K,
+        value: V,
+    ) -> &mut Self {
+        let key = key.into();
+        let value = value.into();
+        self.mutate_root_items(|items| upsert_property_preserve_tail(items, &key, &value, 2))
+    }
+
+    pub fn remove_property(&mut self, key: &str) -> &mut Self {
+        let key = key.to_string();
+        self.mutate_root_items(|items| remove_property_node(items, &key, 2))
     }
 
     pub fn cst(&self) -> &CstDocument {
@@ -84,6 +167,21 @@ impl FootprintDocument {
         }
         Ok(())
     }
+
+    fn mutate_root_items<F>(&mut self, mutate: F) -> &mut Self
+    where
+        F: FnOnce(&mut Vec<Node>) -> bool,
+    {
+        mutate_root_and_refresh(
+            &mut self.cst,
+            &mut self.ast,
+            &mut self.diagnostics,
+            mutate,
+            parse_ast,
+            |cst, ast| collect_diagnostics(cst, ast.version),
+        );
+        self
+    }
 }
 
 pub struct FootprintFile;
@@ -92,9 +190,9 @@ impl FootprintFile {
     pub fn read<P: AsRef<Path>>(path: P) -> Result<FootprintDocument, Error> {
         let raw = fs::read_to_string(path)?;
         let cst = parse_one(&raw)?;
-        ensure_head(&cst, "footprint")?;
+        ensure_root_head_any(&cst, &["footprint", "module"])?;
         let ast = parse_ast(&cst);
-        let diagnostics = validate_version(ast.version)?;
+        let diagnostics = collect_diagnostics(&cst, ast.version);
         Ok(FootprintDocument {
             ast,
             cst,
@@ -103,34 +201,25 @@ impl FootprintFile {
     }
 }
 
-fn ensure_head(cst: &CstDocument, expected: &str) -> Result<(), Error> {
-    let head = cst
-        .nodes
-        .first()
-        .and_then(|n| match n {
-            Node::List { items, .. } => items.first(),
-            _ => None,
-        })
-        .and_then(|n| match n {
-            Node::Atom {
-                atom: Atom::Symbol(s),
-                ..
-            } => Some(s.as_str()),
-            _ => None,
+fn collect_diagnostics(cst: &CstDocument, version: Option<i32>) -> Vec<Diagnostic> {
+    let mut diagnostics = collect_version_diagnostics(version);
+    if root_head(cst) == Some("module") {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Warning,
+            code: "legacy_root",
+            message: "legacy root token `module` detected; parsing in compatibility mode"
+                .to_string(),
+            span: None,
+            hint: Some("save from newer KiCad to normalize root token to `footprint`".to_string()),
         });
-
-    match head {
-        Some(h) if h == expected => Ok(()),
-        Some(h) => Err(Error::Validation(format!(
-            "expected root token `{expected}`, got `{h}`"
-        ))),
-        None => Err(Error::Validation("missing root token".to_string())),
     }
+    diagnostics
 }
 
 fn parse_ast(cst: &CstDocument) -> FootprintAst {
     let mut lib_id = None;
     let mut version = None;
+    let mut tedit = None;
     let mut generator = None;
     let mut generator_version = None;
     let mut layer = None;
@@ -161,6 +250,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
     let mut fp_curve_count = 0usize;
     let mut fp_text_count = 0usize;
     let mut fp_text_box_count = 0usize;
+    let mut dimension_count = 0usize;
     let mut graphic_count = 0usize;
     let mut unknown_nodes = Vec::new();
 
@@ -169,6 +259,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
         for item in items.iter().skip(2) {
             match head_of(item) {
                 Some("version") => version = second_atom_i32(item),
+                Some("tedit") => tedit = second_atom_string(item),
                 Some("generator") => generator = second_atom_string(item),
                 Some("generator_version") => generator_version = second_atom_string(item),
                 Some("layer") => layer = second_atom_string(item),
@@ -191,13 +282,12 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
                     solder_paste_margin_ratio = second_atom_string(item)
                 }
                 Some("duplicate_pad_numbers_are_jumpers") => {
-                    duplicate_pad_numbers_are_jumpers = second_atom_string(item).and_then(|s| {
-                        match s.as_str() {
+                    duplicate_pad_numbers_are_jumpers =
+                        second_atom_string(item).and_then(|s| match s.as_str() {
                             "yes" => Some(true),
                             "no" => Some(false),
                             _ => None,
-                        }
-                    })
+                        })
                 }
                 Some("pad") => pad_count += 1,
                 Some("model") => model_count += 1,
@@ -235,6 +325,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
                     fp_text_box_count += 1;
                     graphic_count += 1;
                 }
+                Some("dimension") => dimension_count += 1,
                 _ => {
                     if let Some(unknown) = UnknownNode::from_node(item) {
                         unknown_nodes.push(unknown);
@@ -247,6 +338,7 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
     FootprintAst {
         lib_id,
         version,
+        tedit,
         generator,
         generator_version,
         layer,
@@ -277,37 +369,10 @@ fn parse_ast(cst: &CstDocument) -> FootprintAst {
         fp_curve_count,
         fp_text_count,
         fp_text_box_count,
+        dimension_count,
         graphic_count,
         unknown_nodes,
     }
-}
-
-fn validate_version(version: Option<i32>) -> Result<Vec<Diagnostic>, Error> {
-    let policy = VersionPolicy::default();
-    let mut diagnostics = Vec::new();
-
-    if let Some(v) = version {
-        if policy.reject_older && !policy.accepts(v) {
-            return Err(Error::Validation(format!(
-                "unsupported KiCad version {v}; expected v9+ format"
-            )));
-        }
-
-        if policy.is_future_for_target(v) {
-            diagnostics.push(Diagnostic {
-                severity: Severity::Warning,
-                code: "future_format",
-                message: format!(
-                    "version {v} is newer than target {:?}; keeping lossless CST for compatibility",
-                    policy.target
-                ),
-                span: None,
-                hint: Some("consider newer parser coverage for this token set".to_string()),
-            });
-        }
-    }
-
-    Ok(diagnostics)
 }
 
 #[cfg(test)]
@@ -357,6 +422,38 @@ mod tests {
     }
 
     #[test]
+    fn read_footprint_warns_on_legacy_version() {
+        let path = tmp_file("footprint_legacy");
+        fs::write(
+            &path,
+            "(footprint \"R\" (version 20221018) (generator pcbnew))\n",
+        )
+        .expect("write fixture");
+
+        let doc = FootprintFile::read(&path).expect("read");
+        assert_eq!(doc.diagnostics().len(), 1);
+        assert_eq!(doc.diagnostics()[0].code, "legacy_format");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn read_footprint_accepts_legacy_module_root() {
+        let path = tmp_file("footprint_module_root");
+        let src = "(module R_0603 (layer F.Cu) (tedit 5F0C7995) (attr smd))\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let doc = FootprintFile::read(&path).expect("read");
+        assert_eq!(doc.ast().lib_id.as_deref(), Some("R_0603"));
+        assert_eq!(doc.ast().tedit.as_deref(), Some("5F0C7995"));
+        assert!(doc.ast().attr_present);
+        assert_eq!(doc.diagnostics().len(), 1);
+        assert_eq!(doc.diagnostics()[0].code, "legacy_root");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn read_footprint_captures_unknown_nodes() {
         let path = tmp_file("footprint_unknown");
         let src =
@@ -365,7 +462,10 @@ mod tests {
 
         let doc = FootprintFile::read(&path).expect("read");
         assert_eq!(doc.ast().unknown_nodes.len(), 1);
-        assert_eq!(doc.ast().unknown_nodes[0].head.as_deref(), Some("future_shape"));
+        assert_eq!(
+            doc.ast().unknown_nodes[0].head.as_deref(),
+            Some("future_shape")
+        );
 
         let _ = fs::remove_file(path);
     }
@@ -373,7 +473,7 @@ mod tests {
     #[test]
     fn read_footprint_parses_top_level_counts() {
         let path = tmp_file("footprint_counts");
-        let src = "(footprint \"X\" (version 20260101) (generator pcbnew) (generator_version \"10.0\") (layer \"F.Cu\")\n  (descr \"demo\")\n  (tags \"a b\")\n  (property \"Reference\" \"R?\")\n  (property \"Value\" \"X\")\n  (attr smd)\n  (private_layers \"In1.Cu\")\n  (net_tie_pad_groups \"1,2\")\n  (solder_mask_margin 0.02)\n  (solder_paste_margin -0.01)\n  (solder_paste_margin_ratio -0.2)\n  (duplicate_pad_numbers_are_jumpers yes)\n  (fp_text reference \"R1\" (at 0 0) (layer \"F.SilkS\"))\n  (fp_line (start 0 0) (end 1 1) (layer \"F.SilkS\"))\n  (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\" \"F.Mask\"))\n  (model \"foo.step\")\n  (zone)\n  (group (id \"g1\"))\n)\n";
+        let src = "(footprint \"X\" (version 20260101) (generator pcbnew) (generator_version \"10.0\") (layer \"F.Cu\")\n  (descr \"demo\")\n  (tags \"a b\")\n  (property \"Reference\" \"R?\")\n  (property \"Value\" \"X\")\n  (attr smd)\n  (private_layers \"In1.Cu\")\n  (net_tie_pad_groups \"1,2\")\n  (solder_mask_margin 0.02)\n  (solder_paste_margin -0.01)\n  (solder_paste_margin_ratio -0.2)\n  (duplicate_pad_numbers_are_jumpers yes)\n  (fp_text reference \"R1\" (at 0 0) (layer \"F.SilkS\"))\n  (fp_line (start 0 0) (end 1 1) (layer \"F.SilkS\"))\n  (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\" \"F.Mask\"))\n  (model \"foo.step\")\n  (zone)\n  (group (id \"g1\"))\n  (dimension)\n)\n";
         fs::write(&path, src).expect("write fixture");
 
         let doc = FootprintFile::read(&path).expect("read");
@@ -400,6 +500,7 @@ mod tests {
         assert_eq!(doc.ast().model_count, 1);
         assert_eq!(doc.ast().zone_count, 1);
         assert_eq!(doc.ast().group_count, 1);
+        assert_eq!(doc.ast().dimension_count, 1);
         assert!(doc.ast().unknown_nodes.is_empty());
 
         let _ = fs::remove_file(path);
@@ -460,5 +561,63 @@ mod tests {
         assert!(doc.ast().unknown_nodes.is_empty());
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn edit_roundtrip_updates_core_fields_and_properties() {
+        let path = tmp_file("footprint_edit_input");
+        let src = "(footprint \"Old\" (version 20241229) (generator pcbnew) (layer \"F.Cu\")\n  (property \"Reference\" \"R1\")\n  (property \"Value\" \"10k\")\n  (future_shape foo bar)\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = FootprintFile::read(&path).expect("read");
+        doc.set_lib_id("New_Footprint")
+            .set_version(20260101)
+            .set_generator("kiutils")
+            .set_generator_version("dev")
+            .set_layer("B.Cu")
+            .set_descr("demo footprint")
+            .set_tags("r c passives")
+            .set_reference("R99")
+            .set_value("22k")
+            .upsert_property("LCSC", "C1234")
+            .remove_property("DoesNotExist");
+
+        let out = tmp_file("footprint_edit_output");
+        doc.write(&out).expect("write");
+        let written = fs::read_to_string(&out).expect("read out");
+        assert!(written.contains("(future_shape foo bar)"));
+        assert!(written.contains("(property \"LCSC\" \"C1234\")"));
+
+        let reread = FootprintFile::read(&out).expect("reread");
+        assert_eq!(reread.ast().lib_id.as_deref(), Some("New_Footprint"));
+        assert_eq!(reread.ast().version, Some(20260101));
+        assert_eq!(reread.ast().generator.as_deref(), Some("kiutils"));
+        assert_eq!(reread.ast().generator_version.as_deref(), Some("dev"));
+        assert_eq!(reread.ast().layer.as_deref(), Some("B.Cu"));
+        assert_eq!(reread.ast().descr.as_deref(), Some("demo footprint"));
+        assert_eq!(reread.ast().tags.as_deref(), Some("r c passives"));
+        assert_eq!(reread.ast().property_count, 3);
+        assert_eq!(reread.ast().unknown_nodes.len(), 1);
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
+    fn remove_property_roundtrip_removes_entry() {
+        let path = tmp_file("footprint_remove_property");
+        let src = "(footprint \"X\" (version 20260101) (generator pcbnew)\n  (property \"Reference\" \"R1\")\n  (property \"Value\" \"10k\")\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = FootprintFile::read(&path).expect("read");
+        doc.remove_property("Value");
+
+        let out = tmp_file("footprint_remove_property_out");
+        doc.write(&out).expect("write");
+        let reread = FootprintFile::read(&out).expect("reread");
+        assert_eq!(reread.ast().property_count, 1);
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
     }
 }

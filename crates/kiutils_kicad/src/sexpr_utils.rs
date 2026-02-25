@@ -43,6 +43,22 @@ pub(crate) fn second_atom_i32(node: &Node) -> Option<i32> {
     second_atom_string(node).and_then(|s| s.parse::<i32>().ok())
 }
 
+pub(crate) fn atom_as_f64(node: &Node) -> Option<f64> {
+    atom_as_string(node).and_then(|s| s.parse::<f64>().ok())
+}
+
+pub(crate) fn second_atom_f64(node: &Node) -> Option<f64> {
+    second_atom_string(node).and_then(|s| s.parse::<f64>().ok())
+}
+
+pub(crate) fn second_atom_bool(node: &Node) -> Option<bool> {
+    match second_atom_string(node).as_deref() {
+        Some("yes") => Some(true),
+        Some("no") => Some(false),
+        _ => None,
+    }
+}
+
 pub(crate) fn list_child_head_count(node: &Node, head: &str) -> usize {
     let Node::List { items, .. } = node else {
         return 0;

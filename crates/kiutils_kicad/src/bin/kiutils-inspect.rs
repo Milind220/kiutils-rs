@@ -2,7 +2,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use kiutils_kicad::{
-    DesignRulesFile, FootprintFile, FpLibTableFile, PcbFile, ProjectFile, WriteMode,
+    DesignRulesFile, FootprintFile, FpLibTableFile, PcbFile, ProjectFile, SchematicFile,
+    SymLibTableFile, SymbolLibFile, WorksheetFile, WriteMode,
 };
 use serde_json::{json, Value};
 
@@ -11,9 +12,13 @@ enum Kind {
     Auto,
     Pcb,
     Footprint,
+    Schematic,
+    Symbol,
     FpLibTable,
+    SymLibTable,
     Dru,
     Project,
+    Worksheet,
 }
 
 #[derive(Debug, Clone)]
@@ -42,7 +47,7 @@ fn run() -> Result<(), String> {
 
     let kind = if opts.kind == Kind::Auto {
         detect_kind(&opts.path).ok_or_else(|| {
-            "could not infer file type; pass --type pcb|footprint|fplib|dru|project".to_string()
+            "could not infer file type; pass --type pcb|footprint|schematic|symbol|fplib|symlib|dru|project|worksheet".to_string()
         })?
     } else {
         opts.kind
@@ -51,9 +56,13 @@ fn run() -> Result<(), String> {
     match kind {
         Kind::Pcb => inspect_pcb(&opts),
         Kind::Footprint => inspect_footprint(&opts),
+        Kind::Schematic => inspect_schematic(&opts),
+        Kind::Symbol => inspect_symbol(&opts),
         Kind::FpLibTable => inspect_fplib(&opts),
+        Kind::SymLibTable => inspect_symlib(&opts),
         Kind::Dru => inspect_dru(&opts),
         Kind::Project => inspect_project(&opts),
+        Kind::Worksheet => inspect_worksheet(&opts),
         Kind::Auto => Err("internal: unresolved auto kind".to_string()),
     }
 }
@@ -117,22 +126,33 @@ fn parse_kind(v: &str) -> Result<Kind, String> {
         "auto" => Ok(Kind::Auto),
         "pcb" => Ok(Kind::Pcb),
         "footprint" => Ok(Kind::Footprint),
+        "schematic" | "sch" => Ok(Kind::Schematic),
+        "symbol" => Ok(Kind::Symbol),
         "fplib" => Ok(Kind::FpLibTable),
+        "symlib" => Ok(Kind::SymLibTable),
         "dru" => Ok(Kind::Dru),
         "project" => Ok(Kind::Project),
+        "worksheet" | "wks" => Ok(Kind::Worksheet),
         _ => Err(format!("invalid --type: {v}")),
     }
 }
 
 fn detect_kind(path: &Path) -> Option<Kind> {
     let name = path.file_name()?.to_str()?;
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or_default();
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default();
     match ext {
         "kicad_pcb" => Some(Kind::Pcb),
         "kicad_mod" => Some(Kind::Footprint),
+        "kicad_sch" => Some(Kind::Schematic),
+        "kicad_sym" => Some(Kind::Symbol),
+        "kicad_wks" => Some(Kind::Worksheet),
         "kicad_dru" => Some(Kind::Dru),
         "kicad_pro" => Some(Kind::Project),
         _ if name == "fp-lib-table" => Some(Kind::FpLibTable),
+        _ if name == "sym-lib-table" => Some(Kind::SymLibTable),
         _ => None,
     }
 }
@@ -169,7 +189,11 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
     let ast = doc.ast();
     vec![
         field("version", json!(ast.version), format!("{:?}", ast.version)),
-        field("generator", json!(ast.generator), format!("{:?}", ast.generator)),
+        field(
+            "generator",
+            json!(ast.generator),
+            format!("{:?}", ast.generator),
+        ),
         field(
             "generator_version",
             json!(ast.generator_version),
@@ -185,7 +209,11 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
             json!(ast.layers.len()),
             ast.layers.len().to_string(),
         ),
-        field("parsed_net_entries", json!(ast.nets.len()), ast.nets.len().to_string()),
+        field(
+            "parsed_net_entries",
+            json!(ast.nets.len()),
+            ast.nets.len().to_string(),
+        ),
         field(
             "parsed_footprint_entries",
             json!(ast.footprints.len()),
@@ -196,8 +224,16 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
             json!(ast.segments.len()),
             ast.segments.len().to_string(),
         ),
-        field("parsed_arc_entries", json!(ast.arcs.len()), ast.arcs.len().to_string()),
-        field("parsed_via_entries", json!(ast.vias.len()), ast.vias.len().to_string()),
+        field(
+            "parsed_arc_entries",
+            json!(ast.arcs.len()),
+            ast.arcs.len().to_string(),
+        ),
+        field(
+            "parsed_via_entries",
+            json!(ast.vias.len()),
+            ast.vias.len().to_string(),
+        ),
         field(
             "parsed_zone_entries",
             json!(ast.zones.len()),
@@ -241,12 +277,18 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
         field(
             "first_footprint_lib_id",
             json!(ast.footprints.first().and_then(|f| f.lib_id.clone())),
-            format!("{:?}", ast.footprints.first().and_then(|f| f.lib_id.clone())),
+            format!(
+                "{:?}",
+                ast.footprints.first().and_then(|f| f.lib_id.clone())
+            ),
         ),
         field(
             "first_footprint_ref",
             json!(ast.footprints.first().and_then(|f| f.reference.clone())),
-            format!("{:?}", ast.footprints.first().and_then(|f| f.reference.clone())),
+            format!(
+                "{:?}",
+                ast.footprints.first().and_then(|f| f.reference.clone())
+            ),
         ),
         field(
             "first_footprint_uuid",
@@ -315,7 +357,10 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
         ),
         field(
             "first_generated_type",
-            json!(ast.generated_items.first().and_then(|g| g.generated_type.clone())),
+            json!(ast
+                .generated_items
+                .first()
+                .and_then(|g| g.generated_type.clone())),
             format!(
                 "{:?}",
                 ast.generated_items
@@ -325,7 +370,10 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
         ),
         field(
             "first_generated_last_netname",
-            json!(ast.generated_items.first().and_then(|g| g.last_netname.clone())),
+            json!(ast
+                .generated_items
+                .first()
+                .and_then(|g| g.last_netname.clone())),
             format!(
                 "{:?}",
                 ast.generated_items
@@ -335,10 +383,15 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
         ),
         field(
             "first_dimension_type",
-            json!(ast.dimensions.first().and_then(|d| d.dimension_type.clone())),
+            json!(ast
+                .dimensions
+                .first()
+                .and_then(|d| d.dimension_type.clone())),
             format!(
                 "{:?}",
-                ast.dimensions.first().and_then(|d| d.dimension_type.clone())
+                ast.dimensions
+                    .first()
+                    .and_then(|d| d.dimension_type.clone())
             ),
         ),
         field(
@@ -422,7 +475,11 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
             json!(ast.embedded_file_count),
             ast.embedded_file_count.to_string(),
         ),
-        field("layer_count", json!(ast.layer_count), ast.layer_count.to_string()),
+        field(
+            "layer_count",
+            json!(ast.layer_count),
+            ast.layer_count.to_string(),
+        ),
         field(
             "property_count",
             json!(ast.property_count),
@@ -490,7 +547,11 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
             ast.trace_arc_count.to_string(),
         ),
         field("via_count", json!(ast.via_count), ast.via_count.to_string()),
-        field("zone_count", json!(ast.zone_count), ast.zone_count.to_string()),
+        field(
+            "zone_count",
+            json!(ast.zone_count),
+            ast.zone_count.to_string(),
+        ),
         field(
             "dimension_count",
             json!(ast.dimension_count),
@@ -531,7 +592,10 @@ fn inspect_pcb(opts: &Opts) -> Result<(), String> {
 
     if opts.show_unknown {
         for n in &doc.ast().unknown_nodes {
-            println!("unknown: head={:?} span={}..{}", n.head, n.span.start, n.span.end);
+            println!(
+                "unknown: head={:?} span={}..{}",
+                n.head, n.span.start, n.span.end
+            );
         }
     }
     if opts.show_diagnostics {
@@ -559,7 +623,10 @@ fn inspect_footprint(opts: &Opts) -> Result<(), String> {
     emit_fields("footprint", &opts.path, &fields, opts.as_json);
     if opts.show_unknown {
         for n in &doc.ast().unknown_nodes {
-            println!("unknown: head={:?} span={}..{}", n.head, n.span.start, n.span.end);
+            println!(
+                "unknown: head={:?} span={}..{}",
+                n.head, n.span.start, n.span.end
+            );
         }
     }
     if opts.show_diagnostics {
@@ -586,7 +653,12 @@ fn footprint_fields(doc: &kiutils_kicad::FootprintDocument) -> Vec<InspectField>
     vec![
         field("lib_id", json!(ast.lib_id), format!("{:?}", ast.lib_id)),
         field("version", json!(ast.version), format!("{:?}", ast.version)),
-        field("generator", json!(ast.generator), format!("{:?}", ast.generator)),
+        field("tedit", json!(ast.tedit), format!("{:?}", ast.tedit)),
+        field(
+            "generator",
+            json!(ast.generator),
+            format!("{:?}", ast.generator),
+        ),
         field(
             "generator_version",
             json!(ast.generator_version),
@@ -635,7 +707,11 @@ fn footprint_fields(doc: &kiutils_kicad::FootprintDocument) -> Vec<InspectField>
             json!(ast.embedded_file_count),
             ast.embedded_file_count.to_string(),
         ),
-        field("clearance", json!(ast.clearance), format!("{:?}", ast.clearance)),
+        field(
+            "clearance",
+            json!(ast.clearance),
+            format!("{:?}", ast.clearance),
+        ),
         field(
             "solder_mask_margin",
             json!(ast.solder_mask_margin),
@@ -657,9 +733,26 @@ fn footprint_fields(doc: &kiutils_kicad::FootprintDocument) -> Vec<InspectField>
             format!("{:?}", ast.duplicate_pad_numbers_are_jumpers),
         ),
         field("pad_count", json!(ast.pad_count), ast.pad_count.to_string()),
-        field("model_count", json!(ast.model_count), ast.model_count.to_string()),
-        field("zone_count", json!(ast.zone_count), ast.zone_count.to_string()),
-        field("group_count", json!(ast.group_count), ast.group_count.to_string()),
+        field(
+            "model_count",
+            json!(ast.model_count),
+            ast.model_count.to_string(),
+        ),
+        field(
+            "zone_count",
+            json!(ast.zone_count),
+            ast.zone_count.to_string(),
+        ),
+        field(
+            "group_count",
+            json!(ast.group_count),
+            ast.group_count.to_string(),
+        ),
+        field(
+            "dimension_count",
+            json!(ast.dimension_count),
+            ast.dimension_count.to_string(),
+        ),
         field(
             "graphic_count",
             json!(ast.graphic_count),
@@ -718,13 +811,344 @@ fn footprint_fields(doc: &kiutils_kicad::FootprintDocument) -> Vec<InspectField>
     ]
 }
 
+fn inspect_schematic(opts: &Opts) -> Result<(), String> {
+    let doc = SchematicFile::read(&opts.path).map_err(|e| e.to_string())?;
+    let fields = schematic_fields(&doc);
+    emit_fields("schematic", &opts.path, &fields, opts.as_json);
+    if opts.show_unknown {
+        for n in &doc.ast().unknown_nodes {
+            println!(
+                "unknown: head={:?} span={}..{}",
+                n.head, n.span.start, n.span.end
+            );
+        }
+    }
+    if opts.show_diagnostics {
+        for d in doc.diagnostics() {
+            println!("diagnostic: [{:?}] {} {}", d.severity, d.code, d.message);
+        }
+    }
+    if opts.show_cst {
+        println!("--- cst (lossless) ---\n{}", doc.cst().to_lossless_string());
+    }
+    if opts.show_canonical {
+        let out = temp_out("inspect_sch", "kicad_sch");
+        doc.write_mode(&out, WriteMode::Canonical)
+            .map_err(|e| e.to_string())?;
+        let s = std::fs::read_to_string(&out).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(out);
+        println!("--- canonical ---\n{s}");
+    }
+    Ok(())
+}
+
+fn schematic_fields(doc: &kiutils_kicad::SchematicDocument) -> Vec<InspectField> {
+    let ast = doc.ast();
+    vec![
+        field("version", json!(ast.version), format!("{:?}", ast.version)),
+        field(
+            "generator",
+            json!(ast.generator),
+            format!("{:?}", ast.generator),
+        ),
+        field(
+            "generator_version",
+            json!(ast.generator_version),
+            format!("{:?}", ast.generator_version),
+        ),
+        field("uuid", json!(ast.uuid), format!("{:?}", ast.uuid)),
+        field("has_paper", json!(ast.has_paper), ast.has_paper.to_string()),
+        field(
+            "paper_kind",
+            json!(ast.paper.as_ref().and_then(|p| p.kind.clone())),
+            format!("{:?}", ast.paper.as_ref().and_then(|p| p.kind.clone())),
+        ),
+        field(
+            "paper_width",
+            json!(ast.paper.as_ref().and_then(|p| p.width)),
+            format!("{:?}", ast.paper.as_ref().and_then(|p| p.width)),
+        ),
+        field(
+            "paper_height",
+            json!(ast.paper.as_ref().and_then(|p| p.height)),
+            format!("{:?}", ast.paper.as_ref().and_then(|p| p.height)),
+        ),
+        field(
+            "paper_orientation",
+            json!(ast.paper.as_ref().and_then(|p| p.orientation.clone())),
+            format!(
+                "{:?}",
+                ast.paper.as_ref().and_then(|p| p.orientation.clone())
+            ),
+        ),
+        field(
+            "title",
+            json!(ast.title_block.as_ref().and_then(|t| t.title.clone())),
+            format!(
+                "{:?}",
+                ast.title_block.as_ref().and_then(|t| t.title.clone())
+            ),
+        ),
+        field(
+            "date",
+            json!(ast.title_block.as_ref().and_then(|t| t.date.clone())),
+            format!(
+                "{:?}",
+                ast.title_block.as_ref().and_then(|t| t.date.clone())
+            ),
+        ),
+        field(
+            "revision",
+            json!(ast.title_block.as_ref().and_then(|t| t.revision.clone())),
+            format!(
+                "{:?}",
+                ast.title_block.as_ref().and_then(|t| t.revision.clone())
+            ),
+        ),
+        field(
+            "company",
+            json!(ast.title_block.as_ref().and_then(|t| t.company.clone())),
+            format!(
+                "{:?}",
+                ast.title_block.as_ref().and_then(|t| t.company.clone())
+            ),
+        ),
+        field(
+            "title_comment_count",
+            json!(ast
+                .title_block
+                .as_ref()
+                .map(|t| t.comments.len())
+                .unwrap_or(0)),
+            ast.title_block
+                .as_ref()
+                .map(|t| t.comments.len())
+                .unwrap_or(0)
+                .to_string(),
+        ),
+        field(
+            "has_title_block",
+            json!(ast.has_title_block),
+            ast.has_title_block.to_string(),
+        ),
+        field(
+            "has_lib_symbols",
+            json!(ast.has_lib_symbols),
+            ast.has_lib_symbols.to_string(),
+        ),
+        field(
+            "embedded_fonts",
+            json!(ast.embedded_fonts),
+            format!("{:?}", ast.embedded_fonts),
+        ),
+        field(
+            "lib_symbol_count",
+            json!(ast.lib_symbol_count),
+            ast.lib_symbol_count.to_string(),
+        ),
+        field(
+            "symbol_count",
+            json!(ast.symbol_count),
+            ast.symbol_count.to_string(),
+        ),
+        field(
+            "sheet_count",
+            json!(ast.sheet_count),
+            ast.sheet_count.to_string(),
+        ),
+        field(
+            "junction_count",
+            json!(ast.junction_count),
+            ast.junction_count.to_string(),
+        ),
+        field(
+            "no_connect_count",
+            json!(ast.no_connect_count),
+            ast.no_connect_count.to_string(),
+        ),
+        field(
+            "bus_entry_count",
+            json!(ast.bus_entry_count),
+            ast.bus_entry_count.to_string(),
+        ),
+        field(
+            "bus_alias_count",
+            json!(ast.bus_alias_count),
+            ast.bus_alias_count.to_string(),
+        ),
+        field(
+            "wire_count",
+            json!(ast.wire_count),
+            ast.wire_count.to_string(),
+        ),
+        field("bus_count", json!(ast.bus_count), ast.bus_count.to_string()),
+        field(
+            "text_count",
+            json!(ast.text_count),
+            ast.text_count.to_string(),
+        ),
+        field(
+            "text_box_count",
+            json!(ast.text_box_count),
+            ast.text_box_count.to_string(),
+        ),
+        field(
+            "image_count",
+            json!(ast.image_count),
+            ast.image_count.to_string(),
+        ),
+        field(
+            "label_count",
+            json!(ast.label_count),
+            ast.label_count.to_string(),
+        ),
+        field(
+            "global_label_count",
+            json!(ast.global_label_count),
+            ast.global_label_count.to_string(),
+        ),
+        field(
+            "hierarchical_label_count",
+            json!(ast.hierarchical_label_count),
+            ast.hierarchical_label_count.to_string(),
+        ),
+        field(
+            "netclass_flag_count",
+            json!(ast.netclass_flag_count),
+            ast.netclass_flag_count.to_string(),
+        ),
+        field(
+            "polyline_count",
+            json!(ast.polyline_count),
+            ast.polyline_count.to_string(),
+        ),
+        field(
+            "rectangle_count",
+            json!(ast.rectangle_count),
+            ast.rectangle_count.to_string(),
+        ),
+        field(
+            "circle_count",
+            json!(ast.circle_count),
+            ast.circle_count.to_string(),
+        ),
+        field("arc_count", json!(ast.arc_count), ast.arc_count.to_string()),
+        field(
+            "rule_area_count",
+            json!(ast.rule_area_count),
+            ast.rule_area_count.to_string(),
+        ),
+        field(
+            "sheet_instance_count",
+            json!(ast.sheet_instance_count),
+            ast.sheet_instance_count.to_string(),
+        ),
+        field(
+            "symbol_instance_count",
+            json!(ast.symbol_instance_count),
+            ast.symbol_instance_count.to_string(),
+        ),
+        field(
+            "unknown_count",
+            json!(ast.unknown_nodes.len()),
+            ast.unknown_nodes.len().to_string(),
+        ),
+        field(
+            "diagnostic_count",
+            json!(doc.diagnostics().len()),
+            doc.diagnostics().len().to_string(),
+        ),
+    ]
+}
+
+fn inspect_symbol(opts: &Opts) -> Result<(), String> {
+    let doc = SymbolLibFile::read(&opts.path).map_err(|e| e.to_string())?;
+    let fields = symbol_fields(&doc);
+    emit_fields("symbol", &opts.path, &fields, opts.as_json);
+    if opts.show_unknown {
+        for n in &doc.ast().unknown_nodes {
+            println!(
+                "unknown: head={:?} span={}..{}",
+                n.head, n.span.start, n.span.end
+            );
+        }
+    }
+    if opts.show_diagnostics {
+        for d in doc.diagnostics() {
+            println!("diagnostic: [{:?}] {} {}", d.severity, d.code, d.message);
+        }
+    }
+    if opts.show_cst {
+        println!("--- cst (lossless) ---\n{}", doc.cst().to_lossless_string());
+    }
+    if opts.show_canonical {
+        let out = temp_out("inspect_sym", "kicad_sym");
+        doc.write_mode(&out, WriteMode::Canonical)
+            .map_err(|e| e.to_string())?;
+        let s = std::fs::read_to_string(&out).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(out);
+        println!("--- canonical ---\n{s}");
+    }
+    Ok(())
+}
+
+fn symbol_fields(doc: &kiutils_kicad::SymbolLibDocument) -> Vec<InspectField> {
+    let ast = doc.ast();
+    vec![
+        field("version", json!(ast.version), format!("{:?}", ast.version)),
+        field(
+            "generator",
+            json!(ast.generator),
+            format!("{:?}", ast.generator),
+        ),
+        field(
+            "generator_version",
+            json!(ast.generator_version),
+            format!("{:?}", ast.generator_version),
+        ),
+        field(
+            "symbol_count",
+            json!(ast.symbol_count),
+            ast.symbol_count.to_string(),
+        ),
+        field(
+            "total_property_count",
+            json!(ast.total_property_count),
+            ast.total_property_count.to_string(),
+        ),
+        field(
+            "total_pin_count",
+            json!(ast.total_pin_count),
+            ast.total_pin_count.to_string(),
+        ),
+        field(
+            "first_symbol_name",
+            json!(ast.symbols.first().and_then(|s| s.name.clone())),
+            format!("{:?}", ast.symbols.first().and_then(|s| s.name.clone())),
+        ),
+        field(
+            "unknown_count",
+            json!(ast.unknown_nodes.len()),
+            ast.unknown_nodes.len().to_string(),
+        ),
+        field(
+            "diagnostic_count",
+            json!(doc.diagnostics().len()),
+            doc.diagnostics().len().to_string(),
+        ),
+    ]
+}
+
 fn inspect_fplib(opts: &Opts) -> Result<(), String> {
     let doc = FpLibTableFile::read(&opts.path).map_err(|e| e.to_string())?;
     let fields = fplib_fields(&doc);
     emit_fields("fplib", &opts.path, &fields, opts.as_json);
     if opts.show_unknown {
         for n in &doc.ast().unknown_nodes {
-            println!("unknown: head={:?} span={}..{}", n.head, n.span.start, n.span.end);
+            println!(
+                "unknown: head={:?} span={}..{}",
+                n.head, n.span.start, n.span.end
+            );
         }
     }
     if opts.show_cst {
@@ -741,17 +1165,51 @@ fn inspect_fplib(opts: &Opts) -> Result<(), String> {
     Ok(())
 }
 
+fn inspect_symlib(opts: &Opts) -> Result<(), String> {
+    let doc = SymLibTableFile::read(&opts.path).map_err(|e| e.to_string())?;
+    let fields = fplib_fields(&doc);
+    emit_fields("symlib", &opts.path, &fields, opts.as_json);
+    if opts.show_unknown {
+        for n in &doc.ast().unknown_nodes {
+            println!(
+                "unknown: head={:?} span={}..{}",
+                n.head, n.span.start, n.span.end
+            );
+        }
+    }
+    if opts.show_cst {
+        println!("--- cst (lossless) ---\n{}", doc.cst().to_lossless_string());
+    }
+    if opts.show_canonical {
+        let out = temp_out("inspect_symlib", "table");
+        doc.write_mode(&out, WriteMode::Canonical)
+            .map_err(|e| e.to_string())?;
+        let s = std::fs::read_to_string(&out).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(out);
+        println!("--- canonical ---\n{s}");
+    }
+    Ok(())
+}
+
 fn inspect_dru(opts: &Opts) -> Result<(), String> {
     let doc = DesignRulesFile::read(&opts.path).map_err(|e| e.to_string())?;
     let fields = dru_fields(&doc);
     emit_fields("dru", &opts.path, &fields, opts.as_json);
     if opts.show_unknown {
         for n in &doc.ast().unknown_nodes {
-            println!("unknown: head={:?} span={}..{}", n.head, n.span.start, n.span.end);
+            println!(
+                "unknown: head={:?} span={}..{}",
+                n.head, n.span.start, n.span.end
+            );
         }
     }
     if opts.show_cst {
         println!("--- cst (lossless) ---\n{}", doc.cst().to_lossless_string());
+    }
+    if opts.show_diagnostics {
+        for d in doc.diagnostics() {
+            println!("diagnostic: [{:?}] {} {}", d.severity, d.code, d.message);
+        }
     }
     if opts.show_canonical {
         let out = temp_out("inspect_dru", "kicad_dru");
@@ -787,6 +1245,37 @@ fn inspect_project(opts: &Opts) -> Result<(), String> {
     Ok(())
 }
 
+fn inspect_worksheet(opts: &Opts) -> Result<(), String> {
+    let doc = WorksheetFile::read(&opts.path).map_err(|e| e.to_string())?;
+    let fields = worksheet_fields(&doc);
+    emit_fields("worksheet", &opts.path, &fields, opts.as_json);
+    if opts.show_unknown {
+        for n in &doc.ast().unknown_nodes {
+            println!(
+                "unknown: head={:?} span={}..{}",
+                n.head, n.span.start, n.span.end
+            );
+        }
+    }
+    if opts.show_diagnostics {
+        for d in doc.diagnostics() {
+            println!("diagnostic: [{:?}] {} {}", d.severity, d.code, d.message);
+        }
+    }
+    if opts.show_cst {
+        println!("--- cst (lossless) ---\n{}", doc.cst().to_lossless_string());
+    }
+    if opts.show_canonical {
+        let out = temp_out("inspect_wks", "kicad_wks");
+        doc.write_mode(&out, WriteMode::Canonical)
+            .map_err(|e| e.to_string())?;
+        let s = std::fs::read_to_string(&out).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(out);
+        println!("--- canonical ---\n{s}");
+    }
+    Ok(())
+}
+
 fn fplib_fields(doc: &kiutils_kicad::FpLibTableDocument) -> Vec<InspectField> {
     let ast = doc.ast();
     vec![
@@ -795,6 +1284,16 @@ fn fplib_fields(doc: &kiutils_kicad::FpLibTableDocument) -> Vec<InspectField> {
             "library_count",
             json!(ast.library_count),
             ast.library_count.to_string(),
+        ),
+        field(
+            "disabled_library_count",
+            json!(ast.disabled_library_count),
+            ast.disabled_library_count.to_string(),
+        ),
+        field(
+            "first_library_name",
+            json!(ast.libraries.first().and_then(|l| l.name.clone())),
+            format!("{:?}", ast.libraries.first().and_then(|l| l.name.clone())),
         ),
         field(
             "unknown_count",
@@ -808,11 +1307,40 @@ fn dru_fields(doc: &kiutils_kicad::DesignRulesDocument) -> Vec<InspectField> {
     let ast = doc.ast();
     vec![
         field("version", json!(ast.version), format!("{:?}", ast.version)),
-        field("rule_count", json!(ast.rule_count), ast.rule_count.to_string()),
+        field(
+            "total_constraint_count",
+            json!(ast.total_constraint_count),
+            ast.total_constraint_count.to_string(),
+        ),
+        field(
+            "rules_with_condition_count",
+            json!(ast.rules_with_condition_count),
+            ast.rules_with_condition_count.to_string(),
+        ),
+        field(
+            "rules_with_layer_count",
+            json!(ast.rules_with_layer_count),
+            ast.rules_with_layer_count.to_string(),
+        ),
+        field(
+            "first_rule_name",
+            json!(ast.rules.first().and_then(|r| r.name.clone())),
+            format!("{:?}", ast.rules.first().and_then(|r| r.name.clone())),
+        ),
+        field(
+            "rule_count",
+            json!(ast.rule_count),
+            ast.rule_count.to_string(),
+        ),
         field(
             "unknown_count",
             json!(ast.unknown_nodes.len()),
             ast.unknown_nodes.len().to_string(),
+        ),
+        field(
+            "diagnostic_count",
+            json!(doc.diagnostics().len()),
+            doc.diagnostics().len().to_string(),
         ),
     ]
 }
@@ -838,6 +1366,54 @@ fn project_fields(doc: &kiutils_kicad::ProjectDocument) -> Vec<InspectField> {
     ]
 }
 
+fn worksheet_fields(doc: &kiutils_kicad::WorksheetDocument) -> Vec<InspectField> {
+    let ast = doc.ast();
+    vec![
+        field("version", json!(ast.version), format!("{:?}", ast.version)),
+        field(
+            "generator",
+            json!(ast.generator),
+            format!("{:?}", ast.generator),
+        ),
+        field(
+            "generator_version",
+            json!(ast.generator_version),
+            format!("{:?}", ast.generator_version),
+        ),
+        field("has_setup", json!(ast.has_setup), ast.has_setup.to_string()),
+        field(
+            "line_count",
+            json!(ast.line_count),
+            ast.line_count.to_string(),
+        ),
+        field(
+            "rect_count",
+            json!(ast.rect_count),
+            ast.rect_count.to_string(),
+        ),
+        field(
+            "tbtext_count",
+            json!(ast.tbtext_count),
+            ast.tbtext_count.to_string(),
+        ),
+        field(
+            "polygon_count",
+            json!(ast.polygon_count),
+            ast.polygon_count.to_string(),
+        ),
+        field(
+            "unknown_count",
+            json!(ast.unknown_nodes.len()),
+            ast.unknown_nodes.len().to_string(),
+        ),
+        field(
+            "diagnostic_count",
+            json!(doc.diagnostics().len()),
+            doc.diagnostics().len().to_string(),
+        ),
+    ]
+}
+
 fn temp_out(prefix: &str, ext: &str) -> PathBuf {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -847,5 +1423,5 @@ fn temp_out(prefix: &str, ext: &str) -> PathBuf {
 }
 
 fn usage() -> String {
-    "usage: kiutils-inspect <path> [--type auto|pcb|footprint|fplib|dru|project] [--json] [--show-cst] [--show-canonical] [--show-unknown] [--show-diagnostics]".to_string()
+    "usage: kiutils-inspect <path> [--type auto|pcb|footprint|schematic|sch|symbol|fplib|symlib|dru|project|worksheet|wks] [--json] [--show-cst] [--show-canonical] [--show-unknown] [--show-diagnostics]".to_string()
 }

@@ -83,7 +83,14 @@ impl ProjectFile {
             })
             .unwrap_or_default();
 
-        let known_top_level = ["meta", "libraries", "board", "sheets", "boards", "text_variables"];
+        let known_top_level = [
+            "meta",
+            "libraries",
+            "board",
+            "sheets",
+            "boards",
+            "text_variables",
+        ];
         let unknown_fields = json
             .as_object()
             .map(|o| {
