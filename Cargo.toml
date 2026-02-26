@@ -2,6 +2,7 @@
 members = [
   "crates/kiutils_sexpr",
   "crates/kiutils_kicad",
+  "crates/kiutils",
 ]
 resolver = "2"
 

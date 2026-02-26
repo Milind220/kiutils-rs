@@ -4,29 +4,30 @@ Rust-native KiCad parser/formatter focused on lossless round-trips, typed APIs, 
 
 ## What This Project Is
 
-`kiutils-rs` is a Rust workspace with two crates:
+`kiutils-rs` is a Rust workspace with three crates:
 
 - `kiutils_sexpr`: lossless S-expression CST parser/printer.
-- `kiutils_kicad`: typed KiCad document APIs on top of the CST layer.
+- `kiutils_kicad`: typed KiCad document APIs on top of the CST layer (implementation crate).
+- `kiutils-rs`: public-facing crate for the stable end-user API (Rust import: `kiutils_rs`).
 
 Default behavior is lossless read/modify/write so unrelated formatting is preserved unless canonical output is explicitly requested.
 
-## Supported File Types (v1 scope)
+## Public API File Types (v1 scope)
 
 - `.kicad_pcb`
 - `.kicad_mod`
-- `.kicad_sch`
-- `.kicad_sym`
 - `fp-lib-table`
-- `sym-lib-table`
 - `.kicad_dru`
 - `.kicad_pro`
-- `.kicad_wks`
 
 Compatibility target:
 
 - Primary: KiCad v10
 - Secondary: KiCad v9
+
+Versioning policy:
+
+- Public API (`kiutils-rs`) follows [SemVer](https://semver.org/).
 
 ## Key Behavior
 
@@ -47,14 +48,14 @@ cargo test
 Feature checks:
 
 ```bash
-cargo test -p kiutils_kicad --features serde
-cargo test -p kiutils_kicad --features parallel
+cargo test -p kiutils-rs --features serde
+cargo test -p kiutils-rs --features parallel
 ```
 
 ### Quick API example (PCB)
 
 ```rust
-use kiutils_kicad::PcbFile;
+use kiutils_rs::PcbFile;
 
 let mut doc = PcbFile::read("input.kicad_pcb")?;
 
@@ -72,7 +73,7 @@ doc.write("output.kicad_pcb")?;
 ### Quick API example (Project JSON)
 
 ```rust
-use kiutils_kicad::ProjectFile;
+use kiutils_rs::ProjectFile;
 
 let doc = ProjectFile::read("input.kicad_pro")?;
 println!("meta.version = {:?}", doc.ast().meta_version);
