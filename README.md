@@ -2,7 +2,7 @@
 
 Rust-native KiCad parser/formatter focused on lossless round-trips, typed APIs, and forward compatibility.
 
-## What This Project Is
+## What This Project Does
 
 `kiutils-rs` is a Rust workspace with three crates:
 
