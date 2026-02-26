@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Public Rust-first KiCad API for lossless typed document IO"
 
 [dependencies]
-kiutils_kicad = { path = "../kiutils_kicad" }
+kiutils_kicad = { version = "0.1.0", path = "../kiutils_kicad" }
 
 [features]
 default = []
