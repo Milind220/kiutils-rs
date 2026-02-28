@@ -11,7 +11,7 @@ keywords = ["kicad", "s-expression", "parser", "eda", "lossless"]
 categories = ["development-tools", "api-bindings", "parser-implementations"]
 
 [dependencies]
-kiutils_kicad = { package = "kiutils_kicad", version = "0.1.0", path = "../kiutils_kicad" }
+kiutils_kicad = { package = "kiutils_kicad", version = "0.1.1", path = "../kiutils_kicad" }
 
 [features]
 default = []
