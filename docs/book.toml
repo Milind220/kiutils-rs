@@ -1,0 +1,14 @@
+[book]
+title = "kiutils-rs Book"
+authors = ["kiutils-rs contributors"]
+description = "Guide documentation for kiutils-rs: lossless KiCad parsing and typed edits in Rust"
+language = "en"
+src = "src"
+
+[build]
+create-missing = false
+
+[output.html]
+default-theme = "light"
+git-repository-url = "https://github.com/Milind220/kiutils-rs"
+edit-url-template = "https://github.com/Milind220/kiutils-rs/edit/main/docs/{path}"
