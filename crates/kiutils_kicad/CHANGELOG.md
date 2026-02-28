@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/Milind220/kiutils-rs/compare/kiutils_kicad-v0.1.0...kiutils_kicad-v0.1.1) - 2026-02-28
+
+### Fixed
+
+- *(publish)* restore published crate IDs
+
+### Other
+
+- add mdBook guide site and Pages deploy workflow ([#14](https://github.com/Milind220/kiutils-rs/pull/14))
+- Merge pull request #13 from Milind220/codex/cargo-discovery-metadata
+
 ## [0.1.0](https://github.com/Milind220/kiutils-rs/releases/tag/kiutils_kicad-v0.1.0) - 2026-02-26
 
 ### Added
