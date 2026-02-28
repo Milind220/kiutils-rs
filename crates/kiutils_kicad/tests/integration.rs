@@ -23,6 +23,7 @@ fn tmp_file(name: &str, ext: &str) -> PathBuf {
 }
 
 #[test]
+// ANCHOR: pcb_roundtrip_test
 fn pcb_fixture_roundtrip_lossless_and_unknown() {
     let src_path = fixture("sample.kicad_pcb");
     let src = fs::read_to_string(&src_path).expect("read fixture");
@@ -37,6 +38,7 @@ fn pcb_fixture_roundtrip_lossless_and_unknown() {
 
     let _ = fs::remove_file(out);
 }
+// ANCHOR_END: pcb_roundtrip_test
 
 #[test]
 fn footprint_fixture_roundtrip_lossless_and_unknown() {

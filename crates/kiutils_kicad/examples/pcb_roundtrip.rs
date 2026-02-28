@@ -7,6 +7,7 @@ fn usage() -> String {
     "usage: pcb_roundtrip <input.kicad_pcb> <output.kicad_pcb>".to_string()
 }
 
+// ANCHOR: pcb_roundtrip_main
 fn main() -> Result<(), String> {
     let mut args = env::args().skip(1);
     let in_path = args.next().map(PathBuf::from).ok_or_else(usage)?;
@@ -31,3 +32,4 @@ fn main() -> Result<(), String> {
 
     Ok(())
 }
+// ANCHOR_END: pcb_roundtrip_main
