@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use kiutils_rs::{DesignRulesFile, FootprintFile, FpLibTableFile, PcbFile, ProjectFile, WriteMode};
+use kiutils_rs::{
+    DesignRulesFile, FootprintFile, FpLibTableFile, PcbFile, ProjectFile, SymLibTableFile,
+    WriteMode,
+};
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -21,6 +24,9 @@ fn facade_reads_all_v1_document_types() {
 
     let fplib = FpLibTableFile::read(fixture("fp-lib-table")).expect("fplib parse");
     assert_eq!(fplib.ast().library_count, 1);
+
+    let symlib = SymLibTableFile::read(fixture("sym-lib-table")).expect("symlib parse");
+    assert_eq!(symlib.ast().library_count, 1);
 
     let dru = DesignRulesFile::read(fixture("sample.kicad_dru")).expect("dru parse");
     assert_eq!(dru.ast().rule_count, 1);
