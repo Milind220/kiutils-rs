@@ -30,6 +30,7 @@
 //! - `.kicad_pcb`
 //! - `.kicad_mod`
 //! - `fp-lib-table`
+//! - `sym-lib-table`
 //! - `.kicad_dru`
 //! - `.kicad_pro`
 //!
@@ -66,8 +67,11 @@ pub use kiutils_kicad::{DesignRuleSummary, DesignRulesAst, DesignRulesDocument, 
 /// Footprint (`.kicad_mod`) APIs.
 pub use kiutils_kicad::{FootprintAst, FootprintDocument, FootprintFile};
 
-/// Footprint library table (`fp-lib-table`) APIs.
-pub use kiutils_kicad::{FpLibTableAst, FpLibTableDocument, FpLibTableFile};
+/// Library table (`fp-lib-table`, `sym-lib-table`) APIs.
+pub use kiutils_kicad::{
+    FpLibTableAst, FpLibTableDocument, FpLibTableFile, SymLibTableAst, SymLibTableDocument,
+    SymLibTableFile,
+};
 
 /// PCB (`.kicad_pcb`) APIs.
 pub use kiutils_kicad::{
