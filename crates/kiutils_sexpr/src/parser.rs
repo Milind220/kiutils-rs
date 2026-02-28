@@ -48,7 +48,7 @@ impl CstDocument {
 
     /// Returns a normalized, pretty-minimal representation.
     pub fn to_canonical_string(&self) -> String {
-        let mut out = String::new();
+        let mut out = String::with_capacity(self.raw.len());
         for (idx, node) in self.nodes.iter().enumerate() {
             if idx > 0 {
                 out.push('\n');
