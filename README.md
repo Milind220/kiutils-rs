@@ -1,5 +1,7 @@
 # kiutils-rs
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Milind220/kiutils-rs)
+
 Rust-native KiCad parser/formatter focused on lossless round-trips, typed APIs, and forward compatibility.
 
 ## What This Project Does
