@@ -1,6 +1,11 @@
-//! Typed KiCad file readers built on top of lossless S-expression CST parsing.
+//! # kiutils-kicad
 //!
-//! Scope (v1):
+//! Typed KiCad file document layer built on top of `kiutils-sexpr`.
+//!
+//! If you want stable end-user imports, use [`kiutils-rs`](https://docs.rs/kiutils-rs).
+//! This crate exposes the implementation-layer API and additional file families.
+//!
+//! ## Scope
 //! - `.kicad_pcb`
 //! - `.kicad_mod`
 //! - `.kicad_sch`
@@ -11,13 +16,32 @@
 //! - `.kicad_pro`
 //! - `.kicad_wks`
 //!
-//! Default write mode is lossless:
-//! parse -> modify typed AST -> write without regenerating unrelated formatting.
+//! ## Core behavior
+//! - Default write mode is lossless (`WriteMode::Lossless`)
+//! - Unknown tokens are captured on typed ASTs (`unknown_nodes`, `unknown_fields`)
+//! - `write_mode(..., WriteMode::Canonical)` available for normalized output
+//! - Version diagnostics produced post-parse for forward-compat signaling
+//!
+//! Evidence:
+//! - Round-trip + unknown preservation tests:
+//!   <https://github.com/Milind220/kiutils-rs/blob/main/crates/kiutils_kicad/tests/integration.rs>
+//! - CLI contract tests (`kiutils-inspect`):
+//!   <https://github.com/Milind220/kiutils-rs/blob/main/crates/kiutils_kicad/tests/inspect_cli.rs>
+//!
+//! ## Quickstart
+//! ```rust,no_run
+//! use kiutils_kicad::{SchematicFile, WriteMode};
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let doc = SchematicFile::read("input.kicad_sch")?;
+//!     doc.write_mode("output.kicad_sch", WriteMode::Lossless)?;
+//!     Ok(())
+//! }
+//! ```
 //!
 //! Policy notes:
-//! - AST `*_count` fields are debug-oriented convenience and are not stability guarantees.
-//! - Unknown token diagnostics are primarily developer-facing; end-user tooling should summarize.
-//! - Version compatibility checks run post-parse by default to maximize lossless ingestion.
+//! - AST `*_count` fields are convenience counters, not strict stability promises.
+//! - Unknown-token diagnostics are developer-facing; summarize before showing end users.
 //! - `.kicad_dru` rule conditions are preserved as strings in v1.
 
 mod batch;

@@ -31,6 +31,16 @@ Versioning policy:
 
 - Public API (`kiutils-rs`) follows [SemVer](https://semver.org/).
 
+## Alpha Documentation Note
+
+`kiutils-rs` is still alpha. You may see `missing_docs` warnings in some crates while the public
+surface is being trimmed and stabilized.
+
+Current policy:
+- Core user-facing APIs and workflows are documented first.
+- Broader internal/public-by-default surfaces may stay partially undocumented temporarily.
+- Coverage will tighten as API boundaries settle.
+
 ## Key Behavior
 
 - Lossless output by default (`WriteMode::Lossless`).

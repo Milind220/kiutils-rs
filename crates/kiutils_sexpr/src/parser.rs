@@ -1,38 +1,52 @@
 use thiserror::Error;
 
+/// Byte-span in the original input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Span {
+    /// Inclusive start byte offset.
     pub start: usize,
+    /// Exclusive end byte offset.
     pub end: usize,
 }
 
+/// Atom value in an S-expression node.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Atom {
+    /// Unquoted token.
     Symbol(String),
+    /// Quoted token with escape sequences unescaped.
     Quoted(String),
 }
 
+/// CST node (list or atom) with source span.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Node {
+    /// Parenthesized list.
     List { items: Vec<Node>, span: Span },
+    /// Atomic token.
     Atom { atom: Atom, span: Span },
 }
 
+/// Parsed CST document plus the original source buffer.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CstDocument {
+    /// Original input bytes interpreted as UTF-8 text.
     pub raw: String,
+    /// Top-level parsed nodes.
     pub nodes: Vec<Node>,
 }
 
 impl CstDocument {
+    /// Returns the original input unchanged.
     pub fn to_lossless_string(&self) -> &str {
         &self.raw
     }
 
+    /// Returns a normalized, pretty-minimal representation.
     pub fn to_canonical_string(&self) -> String {
         let mut out = String::new();
         for (idx, node) in self.nodes.iter().enumerate() {
@@ -76,18 +90,25 @@ fn fmt_node(node: &Node, out: &mut String) {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParseMode {
+    /// Exactly one top-level form required.
     SingleRoot,
+    /// Zero or more top-level forms allowed.
     RootlessMany,
 }
 
+/// Parse failures.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ParseError {
+    /// Input ended before a token/list completed.
     #[error("unexpected eof")]
     UnexpectedEof,
+    /// Unexpected token at byte offset.
     #[error("unexpected token at byte {0}")]
     UnexpectedToken(usize),
+    /// `SingleRoot` mode received zero or multiple roots.
     #[error("expected single root, got {0}")]
     ExpectedSingleRoot(usize),
+    /// Input exceeded the parser nesting guard.
     #[error("maximum nesting depth exceeded at byte {0}")]
     MaxNestingExceeded(usize),
 }
@@ -209,10 +230,12 @@ impl<'a> P<'a> {
     }
 }
 
+/// Parses rootless/multi-form S-expression input.
 pub fn parse_rootless(input: &str) -> Result<CstDocument, ParseError> {
     parse_with_mode(input, ParseMode::RootlessMany)
 }
 
+/// Parses exactly one top-level S-expression root.
 pub fn parse_one(input: &str) -> Result<CstDocument, ParseError> {
     parse_with_mode(input, ParseMode::SingleRoot)
 }
