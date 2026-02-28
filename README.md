@@ -51,6 +51,11 @@ Current policy:
 
 ## Getting Started
 
+Book-style guide:
+
+- Build locally: `mdbook build docs`
+- Read online (after GitHub Pages deploy): `https://milind220.github.io/kiutils-rs/`
+
 ### Build and test
 
 ```bash
