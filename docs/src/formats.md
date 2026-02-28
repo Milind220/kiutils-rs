@@ -7,6 +7,7 @@ Current v1 file support in public API:
 | `.kicad_pcb` | PCB |
 | `.kicad_mod` | Footprint |
 | `fp-lib-table` | Footprint lib table |
+| `sym-lib-table` | Symbol lib table |
 | `.kicad_dru` | Design rules |
 | `.kicad_pro` | Project JSON |
 

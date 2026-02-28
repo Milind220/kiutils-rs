@@ -8,9 +8,9 @@ Rust-native KiCad parser/formatter focused on lossless round-trips, typed APIs, 
 
 `kiutils-rs` is a Rust workspace with three crates:
 
-- `kiutils_sexpr`: lossless S-expression CST parser/printer.
-- `kiutils_kicad`: typed KiCad document APIs on top of the CST layer (implementation crate).
-- `kiutils-rs`: public-facing crate for the stable end-user API (Rust import: `kiutils_rs`).
+- `kiutils-sexpr` (Rust import: `kiutils_sexpr`): lossless S-expression CST parser/printer.
+- `kiutils-kicad` (Rust import: `kiutils_kicad`): typed KiCad document APIs on top of the CST layer (implementation crate).
+- `kiutils-rs` (Rust import: `kiutils_rs`): public-facing crate for the stable end-user API.
 
 Default behavior is lossless read/modify/write so unrelated formatting is preserved unless canonical output is explicitly requested.
 
@@ -19,6 +19,7 @@ Default behavior is lossless read/modify/write so unrelated formatting is preser
 - `.kicad_pcb`
 - `.kicad_mod`
 - `fp-lib-table`
+- `sym-lib-table`
 - `.kicad_dru`
 - `.kicad_pro`
 
@@ -107,7 +108,7 @@ doc.write("output.kicad_pro")?;
 Inspect typed parse results quickly:
 
 ```bash
-cargo run -p kiutils_kicad --bin kiutils-inspect -- <path>
+cargo run -p kiutils-kicad --bin kiutils-inspect -- <path>
 ```
 
 Common flags:
@@ -122,7 +123,7 @@ Common flags:
 Example:
 
 ```bash
-cargo run -p kiutils_kicad --bin kiutils-inspect -- \
+cargo run -p kiutils-kicad --bin kiutils-inspect -- \
   crates/kiutils_kicad/tests/fixtures/sample.kicad_pcb \
   --show-unknown --show-diagnostics --show-canonical
 ```
@@ -130,25 +131,25 @@ cargo run -p kiutils_kicad --bin kiutils-inspect -- \
 ## Additional Round-Trip Examples
 
 ```bash
-cargo run -p kiutils_kicad --example pcb_roundtrip -- input.kicad_pcb output.kicad_pcb
-cargo run -p kiutils_kicad --example footprint_roundtrip -- input.kicad_mod output.kicad_mod
-cargo run -p kiutils_kicad --example schematic_roundtrip -- input.kicad_sch output.kicad_sch
-cargo run -p kiutils_kicad --example symbol_roundtrip -- input.kicad_sym output.kicad_sym
-cargo run -p kiutils_kicad --example symlib_roundtrip -- sym-lib-table sym-lib-table.out
-cargo run -p kiutils_kicad --example dru_roundtrip -- input.kicad_dru output.kicad_dru
-cargo run -p kiutils_kicad --example worksheet_roundtrip -- input.kicad_wks output.kicad_wks
+cargo run -p kiutils-kicad --example pcb_roundtrip -- input.kicad_pcb output.kicad_pcb
+cargo run -p kiutils-kicad --example footprint_roundtrip -- input.kicad_mod output.kicad_mod
+cargo run -p kiutils-kicad --example schematic_roundtrip -- input.kicad_sch output.kicad_sch
+cargo run -p kiutils-kicad --example symbol_roundtrip -- input.kicad_sym output.kicad_sym
+cargo run -p kiutils-kicad --example symlib_roundtrip -- sym-lib-table sym-lib-table.out
+cargo run -p kiutils-kicad --example dru_roundtrip -- input.kicad_dru output.kicad_dru
+cargo run -p kiutils-kicad --example worksheet_roundtrip -- input.kicad_wks output.kicad_wks
 ```
 
 Corpus-style examples (demo trees):
 
 ```bash
-cargo run -p kiutils_kicad --example pcb_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/pcbs
-cargo run -p kiutils_kicad --example footprint_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/footprints
-cargo run -p kiutils_kicad --example schematic_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/schematics
-cargo run -p kiutils_kicad --example symbol_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/symbols
-cargo run -p kiutils_kicad --example symlib_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/symlib
-cargo run -p kiutils_kicad --example dru_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/dru
-cargo run -p kiutils_kicad --example worksheet_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/worksheets
+cargo run -p kiutils-kicad --example pcb_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/pcbs
+cargo run -p kiutils-kicad --example footprint_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/footprints
+cargo run -p kiutils-kicad --example schematic_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/schematics
+cargo run -p kiutils-kicad --example symbol_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/symbols
+cargo run -p kiutils-kicad --example symlib_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/symlib
+cargo run -p kiutils-kicad --example dru_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/dru
+cargo run -p kiutils-kicad --example worksheet_corpus_roundtrip -- ~/Engineering/demos crates/kiutils_kicad/examples/generated/worksheets
 ```
 
 ## Development Workflow

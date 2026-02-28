@@ -31,7 +31,7 @@ cargo test -p kiutils-rs --features parallel
 ## Inspect CLI (typed summary)
 
 ```bash
-cargo run -p kiutils_kicad --bin kiutils-inspect -- \
+cargo run -p kiutils-kicad --bin kiutils-inspect -- \
   crates/kiutils_kicad/tests/fixtures/sample.kicad_pcb \
   --show-unknown --show-diagnostics --show-canonical
 ```

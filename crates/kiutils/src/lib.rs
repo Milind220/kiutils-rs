@@ -30,6 +30,7 @@
 //! - `.kicad_pcb`
 //! - `.kicad_mod`
 //! - `fp-lib-table`
+//! - `sym-lib-table`
 //! - `.kicad_dru`
 //! - `.kicad_pro`
 //!
