@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-95ab3efb.js";
+            window.path_to_searchindex_js = "searchindex-1151ce51.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2189e685.js"></script>
@@ -232,7 +232,7 @@ cargo test -p kiutils-rs --features serde
 cargo test -p kiutils-rs --features parallel
 </code></pre>
 <h2 id="inspect-cli-typed-summary"><a class="header" href="#inspect-cli-typed-summary">Inspect CLI (typed summary)</a></h2>
-<pre><code class="language-bash">cargo run -p kiutils-kicad --bin kiutils-inspect -- \
+<pre><code class="language-bash">cargo run -p kiutils_kicad --bin kiutils-inspect -- \
   crates/kiutils_kicad/tests/fixtures/sample.kicad_pcb \
   --show-unknown --show-diagnostics --show-canonical
 </code></pre>
@@ -328,16 +328,16 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
     Ok(())
 }</code></pre>
 <p>Run it:</p>
-<pre><code class="language-bash">cargo run -p kiutils-kicad --example pcb_roundtrip -- input.kicad_pcb output.kicad_pcb
+<pre><code class="language-bash">cargo run -p kiutils_kicad --example pcb_roundtrip -- input.kicad_pcb output.kicad_pcb
 </code></pre>
 <h2 id="corpus-style-examples"><a class="header" href="#corpus-style-examples">Corpus-style examples</a></h2>
-<pre><code class="language-bash">cargo run -p kiutils-kicad --example pcb_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/pcbs
-cargo run -p kiutils-kicad --example footprint_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/footprints
-cargo run -p kiutils-kicad --example schematic_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/schematics
-cargo run -p kiutils-kicad --example symbol_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/symbols
-cargo run -p kiutils-kicad --example symlib_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/symlib
-cargo run -p kiutils-kicad --example dru_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/dru
-cargo run -p kiutils-kicad --example worksheet_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/worksheets
+<pre><code class="language-bash">cargo run -p kiutils_kicad --example pcb_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/pcbs
+cargo run -p kiutils_kicad --example footprint_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/footprints
+cargo run -p kiutils_kicad --example schematic_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/schematics
+cargo run -p kiutils_kicad --example symbol_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/symbols
+cargo run -p kiutils_kicad --example symlib_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/symlib
+cargo run -p kiutils_kicad --example dru_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/dru
+cargo run -p kiutils_kicad --example worksheet_corpus_roundtrip -- &lt;input_dir&gt; crates/kiutils_kicad/examples/generated/worksheets
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="verification"><a class="header" href="#verification">Verification</a></h1>
@@ -376,8 +376,8 @@ mdbook build docs
 <p>Primary API docs:</p>
 <ul>
 <li><a href="https://docs.rs/kiutils-rs/latest/kiutils_rs/"><code>kiutils-rs</code> on docs.rs</a></li>
-<li><a href="https://docs.rs/kiutils-kicad/latest/kiutils_kicad/"><code>kiutils_kicad</code> internals on docs.rs</a></li>
-<li><a href="https://docs.rs/kiutils-sexpr/latest/kiutils_sexpr/"><code>kiutils_sexpr</code> internals on docs.rs</a></li>
+<li><a href="https://docs.rs/kiutils_kicad/latest/kiutils_kicad/"><code>kiutils_kicad</code> internals on docs.rs</a></li>
+<li><a href="https://docs.rs/kiutils_sexpr/latest/kiutils_sexpr/"><code>kiutils_sexpr</code> internals on docs.rs</a></li>
 </ul>
 <p>Use this book for workflows and conventions; use docs.rs for item-level API details.</p>
 
