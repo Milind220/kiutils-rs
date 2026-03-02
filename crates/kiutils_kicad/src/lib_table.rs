@@ -158,7 +158,28 @@ impl LibTableDocument {
         uri: U,
     ) -> &mut Self {
         let name = name.as_ref().to_string();
-        self.remove_library(&name).add_library(name, uri)
+        let uri = uri.into();
+        self.mutate_root_items(|items| {
+            let Some(idx) = find_library_index(items, &name) else {
+                items.push(lib_node(LibNodeInput {
+                    name,
+                    library_type: "KiCad".to_string(),
+                    uri,
+                    options: "".to_string(),
+                    descr: "".to_string(),
+                    disabled: false,
+                }));
+                return true;
+            };
+
+            let Some(Node::List {
+                items: lib_items, ..
+            }) = items.get_mut(idx)
+            else {
+                return false;
+            };
+            upsert_scalar(lib_items, "uri", atom_quoted(uri), 1)
+        })
     }
 
     pub fn write<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
@@ -443,16 +464,23 @@ mod tests {
     #[test]
     fn upsert_library_uri_replaces_existing_uri() {
         let path = tmp_file("fplib_upsert_existing");
-        let src = "(fp_lib_table (version 7) (lib (name \"A\") (type \"KiCad\") (uri \"x\") (options \"\") (descr \"\")))\n";
+        let src = "(fp_lib_table (version 7) (lib (name \"A\") (type \"Legacy\") (uri \"x\") (options \"opt=1\") (descr \"legacy\") (disabled)))\n";
         fs::write(&path, src).expect("write fixture");
 
         let mut doc = FpLibTableFile::read(&path).expect("read");
         doc.upsert_library_uri("A", "${KIPRJMOD}/A.pretty");
         assert_eq!(doc.ast().library_count, 1);
         assert_eq!(
+            doc.ast().libraries[0].library_type.as_deref(),
+            Some("Legacy")
+        );
+        assert_eq!(
             doc.ast().libraries[0].uri.as_deref(),
             Some("${KIPRJMOD}/A.pretty")
         );
+        assert_eq!(doc.ast().libraries[0].options.as_deref(), Some("opt=1"));
+        assert_eq!(doc.ast().libraries[0].descr.as_deref(), Some("legacy"));
+        assert!(doc.ast().libraries[0].disabled);
 
         let _ = fs::remove_file(path);
     }

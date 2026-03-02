@@ -47,9 +47,11 @@ impl ProjectDocument {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
+        let was_ast_dirty = self.ast_dirty;
         let libs = libs.into_iter().map(Into::into).collect::<Vec<_>>();
         self.set_library_array("pinned_symbol_libs", &libs);
-        self.ast.pinned_symbol_libs = libs;
+        self.refresh_ast_from_json();
+        self.ast_dirty = was_ast_dirty;
         self
     }
 
@@ -58,9 +60,11 @@ impl ProjectDocument {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
+        let was_ast_dirty = self.ast_dirty;
         let libs = libs.into_iter().map(Into::into).collect::<Vec<_>>();
         self.set_library_array("pinned_footprint_libs", &libs);
-        self.ast.pinned_footprint_libs = libs;
+        self.refresh_ast_from_json();
+        self.ast_dirty = was_ast_dirty;
         self
     }
 
@@ -106,7 +110,73 @@ impl ProjectDocument {
         if let Ok(json) = serde_json::to_string_pretty(&self.json) {
             self.raw = format!("{json}\n");
         }
-        self.ast_dirty = false;
+    }
+
+    fn refresh_ast_from_json(&mut self) {
+        let meta_version = self
+            .json
+            .get("meta")
+            .and_then(Value::as_object)
+            .and_then(|m| m.get("version"))
+            .and_then(Value::as_i64)
+            .and_then(|v| i32::try_from(v).ok());
+
+        let pinned_footprint_libs = self
+            .json
+            .get("libraries")
+            .and_then(Value::as_object)
+            .and_then(|l| l.get("pinned_footprint_libs"))
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(Value::as_str)
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let pinned_symbol_libs = self
+            .json
+            .get("libraries")
+            .and_then(Value::as_object)
+            .and_then(|l| l.get("pinned_symbol_libs"))
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(Value::as_str)
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let known_top_level = [
+            "meta",
+            "libraries",
+            "board",
+            "sheets",
+            "boards",
+            "text_variables",
+        ];
+        let unknown_fields = self
+            .json
+            .as_object()
+            .map(|o| {
+                o.iter()
+                    .filter(|(k, _)| !known_top_level.contains(&k.as_str()))
+                    .map(|(k, v)| UnknownField {
+                        key: k.clone(),
+                        value: v.clone(),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        self.ast = ProjectAst {
+            meta_version,
+            pinned_symbol_libs,
+            pinned_footprint_libs,
+            unknown_fields,
+        };
     }
 }
 
@@ -277,6 +347,34 @@ mod tests {
         let reread = ProjectFile::read(&out).expect("reread");
         assert_eq!(reread.ast().pinned_symbol_libs, vec!["SYM_A", "SYM_B"]);
         assert_eq!(reread.ast().pinned_footprint_libs, vec!["FP_A", "FP_B"]);
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
+    }
+
+    #[test]
+    fn setters_do_not_clear_ast_mut_dirty_guard() {
+        let path = tmp_file("pro_setter_does_not_clear_dirty");
+        let src = r#"{
+  "meta": { "version": 3 },
+  "libraries": { "pinned_footprint_libs": ["A"] }
+}
+"#;
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = ProjectFile::read(&path).expect("read");
+        doc.ast_mut().meta_version = Some(4);
+        doc.set_pinned_symbol_libs(vec!["SYM_A"]);
+        assert_eq!(doc.ast().meta_version, Some(3));
+
+        let out = tmp_file("pro_setter_does_not_clear_dirty_out");
+        let err = doc.write(&out).expect_err("write should fail");
+        match err {
+            Error::Validation(msg) => {
+                assert!(msg.contains("ast_mut changes are not serializable"));
+            }
+            _ => panic!("expected validation error"),
+        }
 
         let _ = fs::remove_file(path);
         let _ = fs::remove_file(out);

@@ -13,7 +13,7 @@ Why: setter APIs reconcile AST/CST correctly.
 Examples:
 - `ProjectDocument::set_pinned_symbol_libs(...)`
 - `ProjectDocument::set_pinned_footprint_libs(...)`
-- `LibTableDocument::upsert_library_uri(...)`
+- `LibTableDocument::upsert_library_uri(...)` (updates existing URI only; adds if missing)
 
 ## Common pitfalls
 
