@@ -41,14 +41,14 @@ checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 
 [[package]]
 name = "kiutils-rs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "kiutils_kicad",
 ]
 
 [[package]]
 name = "kiutils_kicad"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "kiutils_sexpr",
  "rayon",

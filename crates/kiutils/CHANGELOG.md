@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/Milind220/kiutils-rs/compare/kiutils-rs-v0.1.1...kiutils-rs-v0.1.2) - 2026-03-02
+
+### Fixed
+
+- add safe project pinned-lib setters and lib-table URI upsert ([#20](https://github.com/Milind220/kiutils-rs/pull/20))
+
 ## [0.1.1](https://github.com/Milind220/kiutils-rs/compare/kiutils-rs-v0.1.0...kiutils-rs-v0.1.1) - 2026-02-28
 
 ### Fixed
