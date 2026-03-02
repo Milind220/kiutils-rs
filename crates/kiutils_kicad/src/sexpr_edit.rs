@@ -50,7 +50,7 @@ pub(crate) fn ensure_root_head_any(cst: &CstDocument, expected: &[&str]) -> Resu
         return Err(Error::Validation("missing root token".to_string()));
     };
 
-    if expected.iter().any(|e| *e == head) {
+    if expected.contains(&head) {
         Ok(head.to_string())
     } else {
         Err(Error::Validation(format!(

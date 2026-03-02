@@ -1354,6 +1354,11 @@ fn project_fields(doc: &kiutils_kicad::ProjectDocument) -> Vec<InspectField> {
             format!("{:?}", ast.meta_version),
         ),
         field(
+            "pinned_symbol_libs",
+            json!(ast.pinned_symbol_libs),
+            format!("{:?}", ast.pinned_symbol_libs),
+        ),
+        field(
             "pinned_footprint_libs",
             json!(ast.pinned_footprint_libs),
             format!("{:?}", ast.pinned_footprint_libs),

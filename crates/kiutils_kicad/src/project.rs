@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
+use serde_json::Map;
 use serde_json::Value;
 
 use crate::{Error, UnknownField, WriteMode};
@@ -10,6 +11,7 @@ use crate::{Error, UnknownField, WriteMode};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProjectAst {
     pub meta_version: Option<i32>,
+    pub pinned_symbol_libs: Vec<String>,
     pub pinned_footprint_libs: Vec<String>,
     pub unknown_fields: Vec<UnknownField>,
 }
@@ -40,6 +42,28 @@ impl ProjectDocument {
         &self.json
     }
 
+    pub fn set_pinned_symbol_libs<I, S>(&mut self, libs: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let libs = libs.into_iter().map(Into::into).collect::<Vec<_>>();
+        self.set_library_array("pinned_symbol_libs", &libs);
+        self.ast.pinned_symbol_libs = libs;
+        self
+    }
+
+    pub fn set_pinned_footprint_libs<I, S>(&mut self, libs: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let libs = libs.into_iter().map(Into::into).collect::<Vec<_>>();
+        self.set_library_array("pinned_footprint_libs", &libs);
+        self.ast.pinned_footprint_libs = libs;
+        self
+    }
+
     pub fn write<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         self.write_mode(path, WriteMode::Lossless)
     }
@@ -59,6 +83,30 @@ impl ProjectDocument {
             }
         }
         Ok(())
+    }
+
+    fn set_library_array(&mut self, key: &str, libs: &[String]) {
+        if !self.json.is_object() {
+            self.json = Value::Object(Map::new());
+        }
+        if let Some(root) = self.json.as_object_mut() {
+            let libraries = root
+                .entry("libraries".to_string())
+                .or_insert_with(|| Value::Object(Map::new()));
+            if !libraries.is_object() {
+                *libraries = Value::Object(Map::new());
+            }
+            if let Some(libraries) = libraries.as_object_mut() {
+                libraries.insert(
+                    key.to_string(),
+                    Value::Array(libs.iter().cloned().map(Value::String).collect()),
+                );
+            }
+        }
+        if let Ok(json) = serde_json::to_string_pretty(&self.json) {
+            self.raw = format!("{json}\n");
+        }
+        self.ast_dirty = false;
     }
 }
 
@@ -92,6 +140,19 @@ impl ProjectFile {
             })
             .unwrap_or_default();
 
+        let pinned_symbol_libs = json
+            .get("libraries")
+            .and_then(Value::as_object)
+            .and_then(|l| l.get("pinned_symbol_libs"))
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(Value::as_str)
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
         let known_top_level = [
             "meta",
             "libraries",
@@ -116,6 +177,7 @@ impl ProjectFile {
         Ok(ProjectDocument {
             ast: ProjectAst {
                 meta_version,
+                pinned_symbol_libs,
                 pinned_footprint_libs,
                 unknown_fields,
             },
@@ -148,7 +210,10 @@ mod tests {
         let path = tmp_file("pro_ok");
         let src = r#"{
   "meta": { "version": 3 },
-  "libraries": { "pinned_footprint_libs": ["A", "B"] },
+  "libraries": {
+    "pinned_symbol_libs": ["S1", "S2"],
+    "pinned_footprint_libs": ["A", "B"]
+  },
   "board": { "foo": true }
 }
 "#;
@@ -156,6 +221,7 @@ mod tests {
 
         let doc = ProjectFile::read(&path).expect("read");
         assert_eq!(doc.ast().meta_version, Some(3));
+        assert_eq!(doc.ast().pinned_symbol_libs, vec!["S1", "S2"]);
         assert_eq!(doc.ast().pinned_footprint_libs, vec!["A", "B"]);
         assert!(doc.ast().unknown_fields.is_empty());
         assert_eq!(doc.raw(), src);
@@ -179,6 +245,41 @@ mod tests {
         assert_eq!(doc.ast().unknown_fields[0].key, "custom_top");
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn setters_update_project_libraries_and_allow_write() {
+        let path = tmp_file("pro_setters");
+        let src = r#"{
+  "meta": { "version": 3 },
+  "libraries": { "pinned_footprint_libs": ["A"] }
+}
+"#;
+        fs::write(&path, src).expect("write fixture");
+
+        let mut doc = ProjectFile::read(&path).expect("read");
+        doc.set_pinned_symbol_libs(vec!["SYM_A", "SYM_B"])
+            .set_pinned_footprint_libs(vec!["FP_A", "FP_B"]);
+        assert_eq!(doc.ast().pinned_symbol_libs, vec!["SYM_A", "SYM_B"]);
+        assert_eq!(doc.ast().pinned_footprint_libs, vec!["FP_A", "FP_B"]);
+        assert_eq!(
+            doc.json()
+                .get("libraries")
+                .and_then(Value::as_object)
+                .and_then(|l| l.get("pinned_symbol_libs"))
+                .and_then(Value::as_array)
+                .map(|x| x.len()),
+            Some(2)
+        );
+
+        let out = tmp_file("pro_setters_out");
+        doc.write(&out).expect("write should work");
+        let reread = ProjectFile::read(&out).expect("reread");
+        assert_eq!(reread.ast().pinned_symbol_libs, vec!["SYM_A", "SYM_B"]);
+        assert_eq!(reread.ast().pinned_footprint_libs, vec!["FP_A", "FP_B"]);
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(out);
     }
 
     #[test]

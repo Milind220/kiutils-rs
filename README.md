@@ -93,7 +93,9 @@ doc.write("output.kicad_pcb")?;
 ```rust
 use kiutils_rs::ProjectFile;
 
-let doc = ProjectFile::read("input.kicad_pro")?;
+let mut doc = ProjectFile::read("input.kicad_pro")?;
+doc.set_pinned_symbol_libs(["MySymbols"])
+    .set_pinned_footprint_libs(["MyFootprints"]);
 println!("meta.version = {:?}", doc.ast().meta_version);
 doc.write("output.kicad_pro")?;
 ```
