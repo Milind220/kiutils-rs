@@ -93,7 +93,9 @@ doc.write("output.kicad_pcb")?;
 ```rust
 use kiutils_rs::ProjectFile;
 
-let doc = ProjectFile::read("input.kicad_pro")?;
+let mut doc = ProjectFile::read("input.kicad_pro")?;
+doc.set_pinned_symbol_libs(["MySymbols"])
+    .set_pinned_footprint_libs(["MyFootprints"]);
 println!("meta.version = {:?}", doc.ast().meta_version);
 doc.write("output.kicad_pro")?;
 ```
@@ -101,7 +103,8 @@ doc.write("output.kicad_pro")?;
 ## Important API Notes
 
 - Use document setter APIs (`set_*`, `upsert_*`, `remove_*`) for serializable edits.
-- `ast_mut()` is read-side/debug convenience only. If you mutate via `ast_mut()`, `write()` returns a validation error because those changes are not auto-reconciled into CST.
+- `ast_mut()` is read-side/debug convenience only. If you mutate via `ast_mut()`, `write()` returns a validation error because those changes are not auto-reconciled into CST. Calling setter APIs after `ast_mut()` does not clear this guard.
+- `LibTableDocument::upsert_library_uri(name, uri)` updates only the target library URI when the library exists; if missing, it adds a new default KiCad library entry.
 
 ## Inspect CLI
 

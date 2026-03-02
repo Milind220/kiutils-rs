@@ -32,10 +32,28 @@ fn facade_reads_all_v1_document_types() {
     assert_eq!(dru.ast().rule_count, 1);
 
     let project = ProjectFile::read(fixture("sample.kicad_pro")).expect("project parse");
+    assert!(project.ast().pinned_symbol_libs.is_empty());
     assert_eq!(project.ast().pinned_footprint_libs, vec!["A"]);
 }
 
 #[test]
 fn facade_exposes_write_mode() {
     assert_ne!(WriteMode::Lossless, WriteMode::Canonical);
+}
+
+#[test]
+fn facade_exposes_project_setters_and_libtable_upsert() {
+    let mut project = ProjectFile::read(fixture("sample.kicad_pro")).expect("project parse");
+    project
+        .set_pinned_symbol_libs(vec!["SYM_A"])
+        .set_pinned_footprint_libs(vec!["FP_A"]);
+    assert_eq!(project.ast().pinned_symbol_libs, vec!["SYM_A"]);
+    assert_eq!(project.ast().pinned_footprint_libs, vec!["FP_A"]);
+
+    let mut fplib = FpLibTableFile::read(fixture("fp-lib-table")).expect("fplib parse");
+    fplib.upsert_library_uri("A", "${KIPRJMOD}/A.pretty");
+    assert_eq!(
+        fplib.ast().libraries[0].uri.as_deref(),
+        Some("${KIPRJMOD}/A.pretty")
+    );
 }
