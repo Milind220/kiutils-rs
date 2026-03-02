@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1151ce51.js";
+            window.path_to_searchindex_js = "searchindex-49b1926d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2189e685.js"></script>
@@ -277,6 +277,12 @@ cargo test -p kiutils-rs --features parallel
 <li>Write with <code>write(...)</code> or <code>write_mode(...)</code></li>
 </ul>
 <p>Why: setter APIs reconcile AST/CST correctly.</p>
+<p>Examples:</p>
+<ul>
+<li><code>ProjectDocument::set_pinned_symbol_libs(...)</code></li>
+<li><code>ProjectDocument::set_pinned_footprint_libs(...)</code></li>
+<li><code>LibTableDocument::upsert_library_uri(...)</code> (updates existing URI only; adds if missing)</li>
+</ul>
 <h2 id="common-pitfalls"><a class="header" href="#common-pitfalls">Common pitfalls</a></h2>
 <div class="table-wrapper">
 <table>
