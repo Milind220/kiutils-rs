@@ -29,6 +29,8 @@
 //! ## V1 API scope
 //! - `.kicad_pcb`
 //! - `.kicad_mod`
+//! - `.kicad_sch`
+//! - `.kicad_sym`
 //! - `fp-lib-table`
 //! - `sym-lib-table`
 //! - `.kicad_dru`
@@ -82,3 +84,16 @@ pub use kiutils_kicad::{
 
 /// Project (`.kicad_pro`) APIs.
 pub use kiutils_kicad::{ProjectAst, ProjectDocument, ProjectExtra, ProjectFile};
+
+/// Schematic (`.kicad_sch`) APIs.
+pub use kiutils_kicad::{
+    SchematicAst, SchematicComponent, SchematicDocument, SchematicEmbeddedLibSymbol, SchematicFile,
+    SchematicInstancePath, SchematicPaperSummary, SchematicPinEntry, SchematicPropertyEntry,
+    SchematicTitleBlockSummary, SchematicTopLevelNode,
+};
+
+/// Symbol library (`.kicad_sym`) APIs.
+pub use kiutils_kicad::{
+    SymbolDefinition, SymbolLibAst, SymbolLibDocument, SymbolLibFile, SymbolPinEntry,
+    SymbolPropertyEntry, SymbolSummary, SymbolUnitEntry,
+};

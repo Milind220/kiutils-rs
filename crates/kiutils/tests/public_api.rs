@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use kiutils_rs::{
-    DesignRulesFile, FootprintFile, FpLibTableFile, PcbFile, ProjectFile, SymLibTableFile,
-    WriteMode,
+    DesignRulesFile, FootprintFile, FpLibTableFile, PcbFile, ProjectFile, SchematicFile,
+    SymLibTableFile, SymbolLibFile, WriteMode,
 };
 
 fn fixture(name: &str) -> PathBuf {
@@ -34,6 +34,12 @@ fn facade_reads_all_v1_document_types() {
     let project = ProjectFile::read(fixture("sample.kicad_pro")).expect("project parse");
     assert!(project.ast().pinned_symbol_libs.is_empty());
     assert_eq!(project.ast().pinned_footprint_libs, vec!["A"]);
+
+    let schematic = SchematicFile::read(fixture("sample.kicad_sch")).expect("schematic parse");
+    assert_eq!(schematic.ast().symbol_count, 1);
+
+    let symbol = SymbolLibFile::read(fixture("sample.kicad_sym")).expect("symbol parse");
+    assert_eq!(symbol.ast().symbol_count, 1);
 }
 
 #[test]

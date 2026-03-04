@@ -6,12 +6,12 @@ Current v1 file support in public API:
 | --- | --- |
 | `.kicad_pcb` | PCB |
 | `.kicad_mod` | Footprint |
+| `.kicad_sch` | Schematic |
+| `.kicad_sym` | Symbol library |
 | `fp-lib-table` | Footprint lib table |
 | `sym-lib-table` | Symbol lib table |
 | `.kicad_dru` | Design rules |
 | `.kicad_pro` | Project JSON |
-
-Additional parser support exists in implementation crates (for example schematic/symbol/worksheet), while the stable `kiutils-rs` public surface is intentionally narrow.
 
 ## Write modes
 
