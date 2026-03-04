@@ -7,6 +7,112 @@ use kiutils_kicad::{
     SymLibTableFile, SymbolLibFile, WorksheetFile, WriteMode,
 };
 
+// ---------------------------------------------------------------------------
+// Schematic symbol property editing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn schematic_upsert_symbol_instance_property() {
+    let path = tmp_file("sch_upsert_prop", "kicad_sch");
+    let src = "(kicad_sch (version 20260101) (generator \"eeschema\") (uuid \"u1\")\n  (symbol (lib_id \"Device:R\") (at 100 50 0) (property \"Reference\" \"R1\" (at 0 0 0)) (property \"Value\" \"10k\" (at 0 0 0)))\n)\n";
+    fs::write(&path, src).expect("write fixture");
+
+    let mut doc = SchematicFile::read(&path).expect("read");
+    doc.upsert_symbol_instance_property("R1", "MPN", "RC0603FR-0710KL")
+        .upsert_symbol_instance_property("R1", "Manufacturer", "Yageo");
+
+    let out = tmp_file("sch_upsert_prop_out", "kicad_sch");
+    doc.write(&out).expect("write");
+    let reread = SchematicFile::read(&out).expect("reread");
+
+    let symbols = reread.symbol_instances();
+    assert_eq!(symbols.len(), 1);
+    let r1 = &symbols[0];
+    assert_eq!(r1.reference.as_deref(), Some("R1"));
+    assert_eq!(r1.value.as_deref(), Some("10k"));
+    assert!(r1
+        .properties
+        .iter()
+        .any(|(k, v)| k == "MPN" && v == "RC0603FR-0710KL"));
+    assert!(r1
+        .properties
+        .iter()
+        .any(|(k, v)| k == "Manufacturer" && v == "Yageo"));
+
+    let _ = fs::remove_file(path);
+    let _ = fs::remove_file(out);
+}
+
+#[test]
+fn schematic_remove_symbol_instance_property() {
+    let path = tmp_file("sch_remove_prop", "kicad_sch");
+    let src = "(kicad_sch (version 20260101) (generator \"eeschema\") (uuid \"u1\")\n  (symbol (lib_id \"Device:R\") (property \"Reference\" \"R1\" (at 0 0 0)) (property \"Value\" \"10k\" (at 0 0 0)) (property \"MPN\" \"RC0603\" (at 0 0 0)))\n)\n";
+    fs::write(&path, src).expect("write fixture");
+
+    let mut doc = SchematicFile::read(&path).expect("read");
+    doc.remove_symbol_instance_property("R1", "MPN");
+
+    let out = tmp_file("sch_remove_prop_out", "kicad_sch");
+    doc.write(&out).expect("write");
+    let reread = SchematicFile::read(&out).expect("reread");
+
+    let symbols = reread.symbol_instances();
+    assert_eq!(symbols.len(), 1);
+    assert!(!symbols[0].properties.iter().any(|(k, _)| k == "MPN"));
+    assert_eq!(symbols[0].reference.as_deref(), Some("R1"));
+    assert_eq!(symbols[0].value.as_deref(), Some("10k"));
+
+    let _ = fs::remove_file(path);
+    let _ = fs::remove_file(out);
+}
+
+#[test]
+fn schematic_upsert_preserves_roundtrip() {
+    let path = tmp_file("sch_roundtrip_prop", "kicad_sch");
+    let src = "(kicad_sch (version 20260101) (generator \"eeschema\") (uuid \"u1\")\n  (symbol (lib_id \"Device:R\") (at 100 50 0) (property \"Reference\" \"R1\" (at 0 0 0) (effects (font (size 1.27 1.27)))) (property \"Value\" \"10k\" (at 0 0 0) (effects (font (size 1.27 1.27)))))\n)\n";
+    fs::write(&path, src).expect("write fixture");
+
+    let mut doc = SchematicFile::read(&path).expect("read");
+    // Upsert MPN then write, re-read, upsert same value again — should be no-op
+    doc.upsert_symbol_instance_property("R1", "MPN", "TEST123");
+
+    let out = tmp_file("sch_roundtrip_prop_out", "kicad_sch");
+    doc.write(&out).expect("write");
+
+    let mut doc2 = SchematicFile::read(&out).expect("reread");
+    let cst_before = doc2.cst().to_lossless_string().to_string();
+    doc2.upsert_symbol_instance_property("R1", "MPN", "TEST123"); // no-op
+    let cst_after = doc2.cst().to_lossless_string();
+    assert_eq!(cst_before, cst_after, "no-op upsert should preserve CST");
+
+    let _ = fs::remove_file(path);
+    let _ = fs::remove_file(out);
+}
+
+#[test]
+fn schematic_symbol_instances_extracts_all() {
+    let path = tmp_file("sch_list_symbols", "kicad_sch");
+    let src = "(kicad_sch (version 20260101) (generator \"eeschema\") (uuid \"u1\")\n  (symbol (lib_id \"Device:R\") (property \"Reference\" \"R1\" (at 0 0 0)) (property \"Value\" \"10k\" (at 0 0 0)) (property \"Footprint\" \"R_0603\" (at 0 0 0)))\n  (symbol (lib_id \"Device:C\") (property \"Reference\" \"C1\" (at 0 0 0)) (property \"Value\" \"100nF\" (at 0 0 0)))\n)\n";
+    fs::write(&path, src).expect("write fixture");
+
+    let doc = SchematicFile::read(&path).expect("read");
+    let symbols = doc.symbol_instances();
+
+    assert_eq!(symbols.len(), 2);
+
+    assert_eq!(symbols[0].reference.as_deref(), Some("R1"));
+    assert_eq!(symbols[0].lib_id.as_deref(), Some("Device:R"));
+    assert_eq!(symbols[0].value.as_deref(), Some("10k"));
+    assert_eq!(symbols[0].footprint.as_deref(), Some("R_0603"));
+
+    assert_eq!(symbols[1].reference.as_deref(), Some("C1"));
+    assert_eq!(symbols[1].lib_id.as_deref(), Some("Device:C"));
+    assert_eq!(symbols[1].value.as_deref(), Some("100nF"));
+    assert_eq!(symbols[1].footprint, None);
+
+    let _ = fs::remove_file(path);
+}
+
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

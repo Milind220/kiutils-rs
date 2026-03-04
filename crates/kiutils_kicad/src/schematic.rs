@@ -6,11 +6,13 @@ use kiutils_sexpr::{parse_one, CstDocument, Node};
 use crate::diagnostic::Diagnostic;
 use crate::sections::{parse_paper, parse_title_block, ParsedPaper, ParsedTitleBlock};
 use crate::sexpr_edit::{
-    atom_quoted, atom_symbol, ensure_root_head_any, mutate_root_and_refresh, paper_standard_node,
-    paper_user_node, upsert_node, upsert_scalar, upsert_section_child_scalar,
+    atom_quoted, atom_symbol, ensure_root_head_any, find_property_index, mutate_root_and_refresh,
+    paper_standard_node, paper_user_node, remove_property, upsert_node,
+    upsert_property_preserve_tail, upsert_scalar, upsert_section_child_scalar,
 };
 use crate::sexpr_utils::{
-    head_of, list_child_head_count, second_atom_bool, second_atom_i32, second_atom_string,
+    atom_as_string, head_of, list_child_head_count, second_atom_bool, second_atom_i32,
+    second_atom_string,
 };
 use crate::version_diag::collect_version_diagnostics;
 use crate::{Error, UnknownNode, WriteMode};
@@ -55,6 +57,18 @@ impl From<ParsedTitleBlock> for SchematicTitleBlockSummary {
             comments: value.comments,
         }
     }
+}
+
+/// Summary of a symbol instance embedded in a schematic.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SchematicSymbolInfo {
+    pub reference: Option<String>,
+    pub lib_id: Option<String>,
+    pub value: Option<String>,
+    pub footprint: Option<String>,
+    /// All properties as (key, value) pairs.
+    pub properties: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -211,6 +225,107 @@ impl SchematicDocument {
         })
     }
 
+    /// Return filenames of sub-sheets referenced by `(sheet ...)` nodes.
+    ///
+    /// The filenames come from the `Sheetfile` property on each sheet node
+    /// and are relative to the directory containing this schematic.
+    pub fn sheet_filenames(&self) -> Vec<String> {
+        let items = match self.cst.nodes.first() {
+            Some(Node::List { items, .. }) => items,
+            _ => return Vec::new(),
+        };
+        items
+            .iter()
+            .skip(1)
+            .filter(|node| head_of(node) == Some("sheet"))
+            .filter_map(|node| {
+                let Node::List {
+                    items: sheet_items, ..
+                } = node
+                else {
+                    return None;
+                };
+                // Look for (property "Sheetfile" "filename.kicad_sch" ...)
+                find_property_index(sheet_items, "Sheetfile", 1).and_then(|idx| {
+                    if let Some(Node::List {
+                        items: prop_items, ..
+                    }) = sheet_items.get(idx)
+                    {
+                        prop_items.get(2).and_then(atom_as_string)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// Return info for all symbol instances in the schematic.
+    pub fn symbol_instances(&self) -> Vec<SchematicSymbolInfo> {
+        let items = match self.cst.nodes.first() {
+            Some(Node::List { items, .. }) => items,
+            _ => return Vec::new(),
+        };
+        items
+            .iter()
+            .skip(1)
+            .filter(|node| head_of(node) == Some("symbol"))
+            .map(parse_schematic_symbol_info)
+            .collect()
+    }
+
+    /// Upsert a property on every symbol instance matching `reference`.
+    pub fn upsert_symbol_instance_property<R: Into<String>, K: Into<String>, V: Into<String>>(
+        &mut self,
+        reference: R,
+        key: K,
+        value: V,
+    ) -> &mut Self {
+        let reference = reference.into();
+        let key = key.into();
+        let value = value.into();
+        self.mutate_root_items(|items| {
+            let indices = find_schematic_symbol_indices_by_reference(items, &reference);
+            let mut changed = false;
+            for idx in indices {
+                if let Some(Node::List {
+                    items: sym_items, ..
+                }) = items.get_mut(idx)
+                {
+                    if upsert_property_preserve_tail(sym_items, &key, &value, 1) {
+                        changed = true;
+                    }
+                }
+            }
+            changed
+        })
+    }
+
+    /// Remove a property from every symbol instance matching `reference`.
+    pub fn remove_symbol_instance_property<R: Into<String>, K: Into<String>>(
+        &mut self,
+        reference: R,
+        key: K,
+    ) -> &mut Self {
+        let reference = reference.into();
+        let key = key.into();
+        self.mutate_root_items(|items| {
+            let indices = find_schematic_symbol_indices_by_reference(items, &reference);
+            let mut changed = false;
+            for idx in indices {
+                if let Some(Node::List {
+                    items: sym_items, ..
+                }) = items.get_mut(idx)
+                {
+                    if remove_property(sym_items, &key, 1) {
+                        changed = true;
+                    }
+                }
+            }
+            changed
+        })
+    }
+
     pub fn write<P: AsRef<Path>>(&self, path: P) -> Result<(), Error> {
         self.write_mode(path, WriteMode::Lossless)
     }
@@ -260,6 +375,101 @@ impl SchematicFile {
             diagnostics,
             ast_dirty: false,
         })
+    }
+}
+
+/// Find indices of root-level `(symbol ...)` nodes whose "Reference" property matches.
+fn find_schematic_symbol_indices_by_reference(items: &[Node], reference: &str) -> Vec<usize> {
+    items
+        .iter()
+        .enumerate()
+        .skip(1)
+        .filter(|(_, node)| {
+            if head_of(node) != Some("symbol") {
+                return false;
+            }
+            let Node::List {
+                items: sym_items, ..
+            } = node
+            else {
+                return false;
+            };
+            if let Some(prop_idx) = find_property_index(sym_items, "Reference", 1) {
+                if let Some(Node::List {
+                    items: prop_items, ..
+                }) = sym_items.get(prop_idx)
+                {
+                    return prop_items.get(2).and_then(atom_as_string).as_deref()
+                        == Some(reference);
+                }
+            }
+            false
+        })
+        .map(|(idx, _)| idx)
+        .collect()
+}
+
+/// Extract property value from a symbol node's items.
+fn get_property_value(sym_items: &[Node], key: &str) -> Option<String> {
+    find_property_index(sym_items, key, 1).and_then(|idx| {
+        if let Some(Node::List {
+            items: prop_items, ..
+        }) = sym_items.get(idx)
+        {
+            prop_items.get(2).and_then(atom_as_string)
+        } else {
+            None
+        }
+    })
+}
+
+fn parse_schematic_symbol_info(node: &Node) -> SchematicSymbolInfo {
+    let Node::List { items, .. } = node else {
+        return SchematicSymbolInfo {
+            reference: None,
+            lib_id: None,
+            value: None,
+            footprint: None,
+            properties: Vec::new(),
+        };
+    };
+
+    let lib_id = items
+        .iter()
+        .skip(1)
+        .find(|n| head_of(n) == Some("lib_id"))
+        .and_then(second_atom_string);
+
+    let reference = get_property_value(items, "Reference");
+    let value = get_property_value(items, "Value");
+    let footprint = get_property_value(items, "Footprint");
+
+    let properties: Vec<(String, String)> = items
+        .iter()
+        .skip(1)
+        .filter(|n| head_of(n) == Some("property"))
+        .filter_map(|n| {
+            let Node::List {
+                items: prop_items, ..
+            } = n
+            else {
+                return None;
+            };
+            let key = prop_items.get(1).and_then(atom_as_string)?;
+            let val = prop_items
+                .get(2)
+                .and_then(atom_as_string)
+                .unwrap_or_default();
+            Some((key, val))
+        })
+        .collect();
+
+    SchematicSymbolInfo {
+        reference,
+        lib_id,
+        value,
+        footprint,
+        properties,
     }
 }
 

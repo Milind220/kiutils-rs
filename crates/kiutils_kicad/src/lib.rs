@@ -79,7 +79,7 @@ pub use pcb::{
 };
 pub use project::{ProjectAst, ProjectDocument, ProjectExtra, ProjectFile};
 pub use schematic::{
-    SchematicAst, SchematicDocument, SchematicFile, SchematicPaperSummary,
+    SchematicAst, SchematicDocument, SchematicFile, SchematicPaperSummary, SchematicSymbolInfo,
     SchematicTitleBlockSummary,
 };
 pub use symbol::{SymbolLibAst, SymbolLibDocument, SymbolLibFile, SymbolSummary};
