@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::{collections::BTreeMap, collections::HashMap};
 
 use kiutils_sexpr::{parse_one, CstDocument, Node};
 
@@ -10,7 +11,8 @@ use crate::sexpr_edit::{
     paper_user_node, upsert_node, upsert_scalar, upsert_section_child_scalar,
 };
 use crate::sexpr_utils::{
-    head_of, list_child_head_count, second_atom_bool, second_atom_i32, second_atom_string,
+    atom_as_f64, atom_as_string, head_of, list_child_head_count, second_atom_bool, second_atom_f64,
+    second_atom_i32, second_atom_string,
 };
 use crate::version_diag::collect_version_diagnostics;
 use crate::{Error, UnknownNode, WriteMode};
@@ -59,6 +61,80 @@ impl From<ParsedTitleBlock> for SchematicTitleBlockSummary {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SchematicPropertyEntry {
+    pub key: Option<String>,
+    pub value: Option<String>,
+    pub id: Option<i32>,
+    pub node: Node,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SchematicPinEntry {
+    pub number: Option<String>,
+    pub kind: Option<String>,
+    pub at: Option<[f64; 3]>,
+    pub uuid: Option<String>,
+    pub node: Node,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SchematicInstancePath {
+    pub project: Option<String>,
+    pub path: Option<String>,
+    pub reference: Option<String>,
+    pub unit: Option<i32>,
+    pub page: Option<String>,
+    pub node: Node,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SchematicTopLevelNode {
+    pub head: String,
+    pub text: Option<String>,
+    pub uuid: Option<String>,
+    pub lib_id: Option<String>,
+    pub unit: Option<i32>,
+    pub at: Option<[f64; 3]>,
+    pub size: Option<[f64; 2]>,
+    pub start: Option<[f64; 2]>,
+    pub end: Option<[f64; 2]>,
+    pub center: Option<[f64; 2]>,
+    pub mid: Option<[f64; 2]>,
+    pub radius: Option<f64>,
+    pub point_count: usize,
+    pub properties: Vec<SchematicPropertyEntry>,
+    pub pins: Vec<SchematicPinEntry>,
+    pub instance_paths: Vec<SchematicInstancePath>,
+    pub child_heads: Vec<String>,
+    pub node: Node,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SchematicEmbeddedLibSymbol {
+    pub name: Option<String>,
+    pub property_count: usize,
+    pub pin_count: usize,
+    pub unit_count: usize,
+    pub has_embedded_fonts: bool,
+    pub node: Node,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SchematicComponent {
+    pub reference: String,
+    pub value: Option<String>,
+    pub lib_id: Option<String>,
+    pub unit: Option<i32>,
+    pub uuid: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SchematicAst {
     pub version: Option<i32>,
     pub generator: Option<String>,
@@ -70,6 +146,8 @@ pub struct SchematicAst {
     pub title_block: Option<SchematicTitleBlockSummary>,
     pub has_lib_symbols: bool,
     pub embedded_fonts: Option<bool>,
+    pub lib_symbol_summaries: Vec<SchematicEmbeddedLibSymbol>,
+    pub top_level_nodes: Vec<SchematicTopLevelNode>,
     pub lib_symbol_count: usize,
     pub symbol_count: usize,
     pub sheet_count: usize,
@@ -94,6 +172,54 @@ pub struct SchematicAst {
     pub sheet_instance_count: usize,
     pub symbol_instance_count: usize,
     pub unknown_nodes: Vec<UnknownNode>,
+}
+
+impl SchematicAst {
+    pub fn components(&self, include_virtual: bool) -> Vec<SchematicComponent> {
+        let mut by_reference = BTreeMap::<String, SchematicComponent>::new();
+        for node in self.top_level_nodes.iter().filter(|n| n.head == "symbol") {
+            let reference = node
+                .properties
+                .iter()
+                .find(|p| p.key.as_deref() == Some("Reference"))
+                .and_then(|p| p.value.clone())
+                .or_else(|| {
+                    node.instance_paths
+                        .iter()
+                        .find_map(|path| path.reference.clone())
+                });
+            let Some(reference) = reference else {
+                continue;
+            };
+            if !include_virtual && reference.starts_with('#') {
+                continue;
+            }
+            let value = node
+                .properties
+                .iter()
+                .find(|p| p.key.as_deref() == Some("Value"))
+                .and_then(|p| p.value.clone());
+
+            by_reference
+                .entry(reference.clone())
+                .or_insert(SchematicComponent {
+                    reference,
+                    value,
+                    lib_id: node.lib_id.clone(),
+                    unit: node.unit,
+                    uuid: node.uuid.clone(),
+                });
+        }
+        by_reference.into_values().collect()
+    }
+
+    pub fn node_counts_by_head(&self) -> HashMap<String, usize> {
+        let mut counts = HashMap::new();
+        for node in &self.top_level_nodes {
+            *counts.entry(node.head.clone()).or_insert(0) += 1;
+        }
+        counts
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -274,6 +400,8 @@ fn parse_ast(cst: &CstDocument) -> SchematicAst {
     let mut title_block = None;
     let mut has_lib_symbols = false;
     let mut embedded_fonts = None;
+    let mut lib_symbol_summaries = Vec::new();
+    let mut top_level_nodes = Vec::new();
     let mut lib_symbol_count = 0usize;
     let mut symbol_count = 0usize;
     let mut sheet_count = 0usize;
@@ -301,6 +429,8 @@ fn parse_ast(cst: &CstDocument) -> SchematicAst {
 
     if let Some(Node::List { items, .. }) = cst.nodes.first() {
         for item in items.iter().skip(1) {
+            let parsed_node = parse_top_level_node(item);
+            top_level_nodes.push(parsed_node);
             match head_of(item) {
                 Some("version") => version = second_atom_i32(item),
                 Some("generator") => generator = second_atom_string(item),
@@ -316,7 +446,8 @@ fn parse_ast(cst: &CstDocument) -> SchematicAst {
                 }
                 Some("lib_symbols") => {
                     has_lib_symbols = true;
-                    lib_symbol_count = list_child_head_count(item, "symbol");
+                    lib_symbol_count += list_child_head_count(item, "symbol");
+                    lib_symbol_summaries.extend(parse_embedded_lib_symbols(item));
                 }
                 Some("symbol") => symbol_count += 1,
                 Some("sheet") => sheet_count += 1,
@@ -339,10 +470,10 @@ fn parse_ast(cst: &CstDocument) -> SchematicAst {
                 Some("arc") => arc_count += 1,
                 Some("rule_area") => rule_area_count += 1,
                 Some("sheet_instances") => {
-                    sheet_instance_count = list_child_head_count(item, "path");
+                    sheet_instance_count += list_child_head_count(item, "path");
                 }
                 Some("symbol_instances") => {
-                    symbol_instance_count = list_child_head_count(item, "path");
+                    symbol_instance_count += list_child_head_count(item, "path");
                 }
                 Some("embedded_fonts") => {
                     embedded_fonts = second_atom_bool(item);
@@ -367,6 +498,8 @@ fn parse_ast(cst: &CstDocument) -> SchematicAst {
         title_block,
         has_lib_symbols,
         embedded_fonts,
+        lib_symbol_summaries,
+        top_level_nodes,
         lib_symbol_count,
         symbol_count,
         sheet_count,
@@ -392,6 +525,240 @@ fn parse_ast(cst: &CstDocument) -> SchematicAst {
         symbol_instance_count,
         unknown_nodes,
     }
+}
+
+fn parse_top_level_node(node: &Node) -> SchematicTopLevelNode {
+    let mut out = SchematicTopLevelNode {
+        head: head_of(node).unwrap_or_default().to_string(),
+        text: second_atom_string(node),
+        uuid: None,
+        lib_id: None,
+        unit: None,
+        at: None,
+        size: None,
+        start: None,
+        end: None,
+        center: None,
+        mid: None,
+        radius: None,
+        point_count: 0,
+        properties: Vec::new(),
+        pins: Vec::new(),
+        instance_paths: Vec::new(),
+        child_heads: Vec::new(),
+        node: node.clone(),
+    };
+
+    let Node::List { items, .. } = node else {
+        return out;
+    };
+
+    for child in items.iter().skip(1) {
+        if let Some(head) = head_of(child) {
+            out.child_heads.push(head.to_string());
+        }
+        match head_of(child) {
+            Some("uuid") => out.uuid = second_atom_string(child),
+            Some("lib_id") => out.lib_id = second_atom_string(child),
+            Some("unit") => out.unit = second_atom_i32(child),
+            Some("at") => out.at = parse_at3(child),
+            Some("size") => out.size = parse_xy2(child),
+            Some("start") => out.start = parse_xy2(child),
+            Some("end") => out.end = parse_xy2(child),
+            Some("center") => out.center = parse_xy2(child),
+            Some("mid") => out.mid = parse_xy2(child),
+            Some("radius") => out.radius = second_atom_f64(child),
+            Some("pts") => out.point_count += list_child_head_count(child, "xy"),
+            Some("property") => out.properties.push(parse_property_entry(child)),
+            Some("pin") => out.pins.push(parse_pin_entry(child)),
+            Some("instances") => out.instance_paths.extend(parse_instance_paths(child)),
+            _ => {}
+        }
+    }
+    out
+}
+
+fn parse_property_entry(node: &Node) -> SchematicPropertyEntry {
+    let Node::List { items, .. } = node else {
+        return SchematicPropertyEntry {
+            key: None,
+            value: None,
+            id: None,
+            node: node.clone(),
+        };
+    };
+
+    SchematicPropertyEntry {
+        key: items.get(1).and_then(atom_as_string),
+        value: items.get(2).and_then(atom_as_string),
+        id: items
+            .get(3)
+            .and_then(atom_as_string)
+            .and_then(|v| v.parse::<i32>().ok()),
+        node: node.clone(),
+    }
+}
+
+fn parse_pin_entry(node: &Node) -> SchematicPinEntry {
+    let Node::List { items, .. } = node else {
+        return SchematicPinEntry {
+            number: None,
+            kind: None,
+            at: None,
+            uuid: None,
+            node: node.clone(),
+        };
+    };
+
+    let mut at = None;
+    let mut uuid = None;
+    for child in items.iter().skip(1) {
+        match head_of(child) {
+            Some("at") => at = parse_at3(child),
+            Some("uuid") => uuid = second_atom_string(child),
+            _ => {}
+        }
+    }
+
+    SchematicPinEntry {
+        number: items.get(1).and_then(atom_as_string),
+        kind: items.get(2).and_then(atom_as_string),
+        at,
+        uuid,
+        node: node.clone(),
+    }
+}
+
+fn parse_instance_paths(instances: &Node) -> Vec<SchematicInstancePath> {
+    let Node::List { items, .. } = instances else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for project_node in items.iter().skip(1) {
+        if head_of(project_node) != Some("project") {
+            continue;
+        }
+        let project = second_atom_string(project_node);
+        let Node::List {
+            items: project_items,
+            ..
+        } = project_node
+        else {
+            continue;
+        };
+        for path_node in project_items.iter().skip(2) {
+            if head_of(path_node) != Some("path") {
+                continue;
+            }
+            let path = second_atom_string(path_node);
+            let mut reference = None;
+            let mut unit = None;
+            let mut page = None;
+            if let Node::List {
+                items: path_items, ..
+            } = path_node
+            {
+                for child in path_items.iter().skip(2) {
+                    match head_of(child) {
+                        Some("reference") => reference = second_atom_string(child),
+                        Some("unit") => unit = second_atom_i32(child),
+                        Some("page") => page = second_atom_string(child),
+                        _ => {}
+                    }
+                }
+            }
+            out.push(SchematicInstancePath {
+                project: project.clone(),
+                path,
+                reference,
+                unit,
+                page,
+                node: path_node.clone(),
+            });
+        }
+    }
+    out
+}
+
+fn parse_embedded_lib_symbols(node: &Node) -> Vec<SchematicEmbeddedLibSymbol> {
+    let Node::List { items, .. } = node else {
+        return Vec::new();
+    };
+    items
+        .iter()
+        .skip(1)
+        .filter(|child| head_of(child) == Some("symbol"))
+        .map(parse_embedded_lib_symbol)
+        .collect()
+}
+
+fn parse_embedded_lib_symbol(node: &Node) -> SchematicEmbeddedLibSymbol {
+    let Node::List { items, .. } = node else {
+        return SchematicEmbeddedLibSymbol {
+            name: None,
+            property_count: 0,
+            pin_count: 0,
+            unit_count: 0,
+            has_embedded_fonts: false,
+            node: node.clone(),
+        };
+    };
+
+    SchematicEmbeddedLibSymbol {
+        name: items.get(1).and_then(atom_as_string),
+        property_count: items
+            .iter()
+            .skip(2)
+            .filter(|child| head_of(child) == Some("property"))
+            .count(),
+        pin_count: count_head_recursive(node, "pin"),
+        unit_count: items
+            .iter()
+            .skip(2)
+            .filter(|child| head_of(child) == Some("symbol"))
+            .count(),
+        has_embedded_fonts: items
+            .iter()
+            .skip(2)
+            .any(|child| head_of(child) == Some("embedded_fonts")),
+        node: node.clone(),
+    }
+}
+
+fn count_head_recursive(node: &Node, target: &str) -> usize {
+    match node {
+        Node::List { items, .. } => {
+            let mut count = 0usize;
+            if head_of(node) == Some(target) {
+                count += 1;
+            }
+            for child in items.iter().skip(1) {
+                count += count_head_recursive(child, target);
+            }
+            count
+        }
+        Node::Atom { .. } => 0,
+    }
+}
+
+fn parse_xy2(node: &Node) -> Option<[f64; 2]> {
+    let Node::List { items, .. } = node else {
+        return None;
+    };
+    Some([
+        items.get(1).and_then(atom_as_f64)?,
+        items.get(2).and_then(atom_as_f64)?,
+    ])
+}
+
+fn parse_at3(node: &Node) -> Option<[f64; 3]> {
+    let Node::List { items, .. } = node else {
+        return None;
+    };
+    let x = items.get(1).and_then(atom_as_f64)?;
+    let y = items.get(2).and_then(atom_as_f64)?;
+    let rot = items.get(3).and_then(atom_as_f64).unwrap_or(0.0);
+    Some([x, y, rot])
 }
 
 #[cfg(test)]

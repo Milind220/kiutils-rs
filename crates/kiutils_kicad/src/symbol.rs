@@ -8,9 +8,61 @@ use crate::sexpr_edit::{
     atom_quoted, atom_symbol, ensure_root_head_any, mutate_root_and_refresh, remove_property,
     upsert_property_preserve_tail, upsert_scalar,
 };
-use crate::sexpr_utils::{atom_as_string, head_of, second_atom_i32, second_atom_string};
+use crate::sexpr_utils::{
+    atom_as_f64, atom_as_string, head_of, second_atom_bool, second_atom_f64, second_atom_i32,
+    second_atom_string,
+};
 use crate::version_diag::collect_version_diagnostics;
 use crate::{Error, UnknownNode, WriteMode};
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SymbolPropertyEntry {
+    pub key: Option<String>,
+    pub value: Option<String>,
+    pub id: Option<i32>,
+    pub at: Option<[f64; 3]>,
+    pub node: Node,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SymbolPinEntry {
+    pub electrical: Option<String>,
+    pub style: Option<String>,
+    pub at: Option<[f64; 3]>,
+    pub length: Option<f64>,
+    pub name: Option<String>,
+    pub number: Option<String>,
+    pub hide: Option<bool>,
+    pub node: Node,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SymbolUnitEntry {
+    pub name: Option<String>,
+    pub pin_count: usize,
+    pub graphic_count: usize,
+    pub child_heads: Vec<String>,
+    pub node: Node,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SymbolDefinition {
+    pub name: Option<String>,
+    pub is_power: bool,
+    pub exclude_from_sim: Option<bool>,
+    pub in_bom: Option<bool>,
+    pub on_board: Option<bool>,
+    pub properties: Vec<SymbolPropertyEntry>,
+    pub pins: Vec<SymbolPinEntry>,
+    pub units: Vec<SymbolUnitEntry>,
+    pub has_embedded_fonts: bool,
+    pub child_heads: Vec<String>,
+    pub node: Node,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -22,7 +74,7 @@ pub struct SymbolSummary {
     pub has_embedded_fonts: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SymbolLibAst {
     pub version: Option<i32>,
@@ -32,6 +84,7 @@ pub struct SymbolLibAst {
     pub total_property_count: usize,
     pub total_pin_count: usize,
     pub symbols: Vec<SymbolSummary>,
+    pub symbol_definitions: Vec<SymbolDefinition>,
     pub unknown_nodes: Vec<UnknownNode>,
 }
 
@@ -250,6 +303,7 @@ fn parse_ast(cst: &CstDocument) -> SymbolLibAst {
     let mut generator = None;
     let mut generator_version = None;
     let mut symbols = Vec::new();
+    let mut symbol_definitions = Vec::new();
     let mut unknown_nodes = Vec::new();
 
     if let Some(Node::List { items, .. }) = cst.nodes.first() {
@@ -258,7 +312,17 @@ fn parse_ast(cst: &CstDocument) -> SymbolLibAst {
                 Some("version") => version = second_atom_i32(item),
                 Some("generator") => generator = second_atom_string(item),
                 Some("generator_version") => generator_version = second_atom_string(item),
-                Some("symbol") => symbols.push(parse_symbol_summary(item)),
+                Some("symbol") => {
+                    let detail = parse_symbol_definition(item);
+                    symbols.push(SymbolSummary {
+                        name: detail.name.clone(),
+                        property_count: detail.properties.len(),
+                        pin_count: detail.pins.len(),
+                        unit_count: detail.units.len(),
+                        has_embedded_fonts: detail.has_embedded_fonts,
+                    });
+                    symbol_definitions.push(detail);
+                }
                 _ => {
                     if let Some(unknown) = UnknownNode::from_node(item) {
                         unknown_nodes.push(unknown);
@@ -280,44 +344,69 @@ fn parse_ast(cst: &CstDocument) -> SymbolLibAst {
         total_property_count,
         total_pin_count,
         symbols,
+        symbol_definitions,
         unknown_nodes,
     }
 }
 
-fn parse_symbol_summary(node: &Node) -> SymbolSummary {
+fn parse_symbol_definition(node: &Node) -> SymbolDefinition {
     let Node::List { items, .. } = node else {
-        return SymbolSummary {
+        return SymbolDefinition {
             name: None,
-            property_count: 0,
-            pin_count: 0,
-            unit_count: 0,
+            is_power: false,
+            exclude_from_sim: None,
+            in_bom: None,
+            on_board: None,
+            properties: Vec::new(),
+            pins: Vec::new(),
+            units: Vec::new(),
             has_embedded_fonts: false,
+            child_heads: Vec::new(),
+            node: node.clone(),
         };
     };
 
     let name = items.get(1).and_then(atom_as_string);
-    let property_count = items
-        .iter()
-        .skip(2)
-        .filter(|child| head_of(child) == Some("property"))
-        .count();
-    let unit_count = items
-        .iter()
-        .skip(2)
-        .filter(|child| head_of(child) == Some("symbol"))
-        .count();
-    let pin_count = count_head_recursive(node, "pin");
-    let has_embedded_fonts = items
-        .iter()
-        .skip(2)
-        .any(|child| head_of(child) == Some("embedded_fonts"));
+    let mut is_power = false;
+    let mut exclude_from_sim = None;
+    let mut in_bom = None;
+    let mut on_board = None;
+    let mut properties = Vec::new();
+    let mut units = Vec::new();
+    let mut child_heads = Vec::new();
+    let mut has_embedded_fonts = false;
 
-    SymbolSummary {
+    for child in items.iter().skip(2) {
+        if let Some(head) = head_of(child) {
+            child_heads.push(head.to_string());
+        }
+        match head_of(child) {
+            Some("power") => is_power = true,
+            Some("exclude_from_sim") => exclude_from_sim = second_atom_bool(child),
+            Some("in_bom") => in_bom = second_atom_bool(child),
+            Some("on_board") => on_board = second_atom_bool(child),
+            Some("embedded_fonts") => has_embedded_fonts = true,
+            Some("property") => properties.push(parse_symbol_property_entry(child)),
+            Some("symbol") => units.push(parse_symbol_unit_entry(child)),
+            _ => {}
+        }
+    }
+
+    let mut pins = Vec::new();
+    collect_pins_recursive(node, &mut pins);
+
+    SymbolDefinition {
         name,
-        property_count,
-        pin_count,
-        unit_count,
+        is_power,
+        exclude_from_sim,
+        in_bom,
+        on_board,
+        properties,
+        pins,
+        units,
         has_embedded_fonts,
+        child_heads,
+        node: node.clone(),
     }
 }
 
@@ -335,6 +424,152 @@ fn count_head_recursive(node: &Node, target: &str) -> usize {
         }
         Node::Atom { .. } => 0,
     }
+}
+
+fn parse_symbol_property_entry(node: &Node) -> SymbolPropertyEntry {
+    let Node::List { items, .. } = node else {
+        return SymbolPropertyEntry {
+            key: None,
+            value: None,
+            id: None,
+            at: None,
+            node: node.clone(),
+        };
+    };
+
+    let at = items
+        .iter()
+        .skip(3)
+        .find(|child| head_of(child) == Some("at"))
+        .and_then(parse_at3);
+
+    SymbolPropertyEntry {
+        key: items.get(1).and_then(atom_as_string),
+        value: items.get(2).and_then(atom_as_string),
+        id: items
+            .get(3)
+            .and_then(atom_as_string)
+            .and_then(|v| v.parse::<i32>().ok()),
+        at,
+        node: node.clone(),
+    }
+}
+
+fn parse_symbol_pin_entry(node: &Node) -> SymbolPinEntry {
+    let Node::List { items, .. } = node else {
+        return SymbolPinEntry {
+            electrical: None,
+            style: None,
+            at: None,
+            length: None,
+            name: None,
+            number: None,
+            hide: None,
+            node: node.clone(),
+        };
+    };
+
+    let mut at = None;
+    let mut length = None;
+    let mut name = None;
+    let mut number = None;
+    let mut hide = None;
+
+    for child in items.iter().skip(1) {
+        match head_of(child) {
+            Some("at") => at = parse_at3(child),
+            Some("length") => length = second_atom_f64(child),
+            Some("name") => name = second_atom_string(child),
+            Some("number") => number = second_atom_string(child),
+            Some("hide") => hide = second_atom_bool(child),
+            _ => {}
+        }
+    }
+
+    SymbolPinEntry {
+        electrical: items.get(1).and_then(atom_as_string),
+        style: items.get(2).and_then(atom_as_string),
+        at,
+        length,
+        name,
+        number,
+        hide,
+        node: node.clone(),
+    }
+}
+
+fn parse_symbol_unit_entry(node: &Node) -> SymbolUnitEntry {
+    let Node::List { items, .. } = node else {
+        return SymbolUnitEntry {
+            name: None,
+            pin_count: 0,
+            graphic_count: 0,
+            child_heads: Vec::new(),
+            node: node.clone(),
+        };
+    };
+
+    let child_heads = items
+        .iter()
+        .skip(2)
+        .filter_map(head_of)
+        .map(|h| h.to_string())
+        .collect::<Vec<_>>();
+    let pin_count = count_head_recursive(node, "pin");
+    let graphic_count = count_heads_recursive_set(
+        node,
+        &["polyline", "rectangle", "circle", "arc", "bezier", "text"],
+    );
+
+    SymbolUnitEntry {
+        name: items.get(1).and_then(atom_as_string),
+        pin_count,
+        graphic_count,
+        child_heads,
+        node: node.clone(),
+    }
+}
+
+fn count_heads_recursive_set(node: &Node, targets: &[&str]) -> usize {
+    match node {
+        Node::List { items, .. } => {
+            let mut count = 0usize;
+            if let Some(head) = head_of(node) {
+                if targets.contains(&head) {
+                    count += 1;
+                }
+            }
+            for child in items.iter().skip(1) {
+                count += count_heads_recursive_set(child, targets);
+            }
+            count
+        }
+        Node::Atom { .. } => 0,
+    }
+}
+
+fn collect_pins_recursive(node: &Node, out: &mut Vec<SymbolPinEntry>) {
+    match node {
+        Node::List { items, .. } => {
+            if head_of(node) == Some("pin") {
+                out.push(parse_symbol_pin_entry(node));
+            }
+            for child in items.iter().skip(1) {
+                collect_pins_recursive(child, out);
+            }
+        }
+        Node::Atom { .. } => {}
+    }
+}
+
+fn parse_at3(node: &Node) -> Option<[f64; 3]> {
+    let Node::List { items, .. } = node else {
+        return None;
+    };
+    let x = items.get(1).and_then(atom_as_f64)?;
+    let y = items.get(2).and_then(atom_as_f64)?;
+    let rot = items.get(3).and_then(atom_as_f64).unwrap_or(0.0);
+    Some([x, y, rot])
 }
 
 fn find_symbol_index(items: &[Node], name: &str) -> Option<usize> {

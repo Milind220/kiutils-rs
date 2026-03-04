@@ -79,10 +79,14 @@ pub use pcb::{
 };
 pub use project::{ProjectAst, ProjectDocument, ProjectExtra, ProjectFile};
 pub use schematic::{
-    SchematicAst, SchematicDocument, SchematicFile, SchematicPaperSummary,
-    SchematicTitleBlockSummary,
+    SchematicAst, SchematicComponent, SchematicDocument, SchematicEmbeddedLibSymbol, SchematicFile,
+    SchematicInstancePath, SchematicPaperSummary, SchematicPinEntry, SchematicPropertyEntry,
+    SchematicTitleBlockSummary, SchematicTopLevelNode,
 };
-pub use symbol::{SymbolLibAst, SymbolLibDocument, SymbolLibFile, SymbolSummary};
+pub use symbol::{
+    SymbolDefinition, SymbolLibAst, SymbolLibDocument, SymbolLibFile, SymbolPinEntry,
+    SymbolPropertyEntry, SymbolSummary, SymbolUnitEntry,
+};
 pub use unknown::{UnknownField, UnknownNode};
 pub use version::{KiCadSeries, VersionPolicy};
 pub use worksheet::{WorksheetAst, WorksheetDocument, WorksheetFile, WorksheetSetupSummary};
