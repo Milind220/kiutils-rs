@@ -18,6 +18,8 @@ Default behavior is lossless read/modify/write so unrelated formatting is preser
 
 - `.kicad_pcb`
 - `.kicad_mod`
+- `.kicad_sch`
+- `.kicad_sym`
 - `fp-lib-table`
 - `sym-lib-table`
 - `.kicad_dru`
