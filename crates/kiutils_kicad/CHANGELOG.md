@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/Milind220/kiutils-rs/compare/kiutils_kicad-v0.2.0...kiutils_kicad-v0.2.1) - 2026-03-05
+
+### Added
+
+- *(kicad)* add schematic symbol instance read/write APIs ([#23](https://github.com/Milind220/kiutils-rs/pull/23))
+
 ## [0.2.0](https://github.com/Milind220/kiutils-rs/compare/kiutils_kicad-v0.1.1...kiutils_kicad-v0.2.0) - 2026-03-02
 
 ### Fixed
