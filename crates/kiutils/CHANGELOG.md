@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/Milind220/kiutils-rs/compare/kiutils-rs-v0.1.2...kiutils-rs-v0.1.3) - 2026-03-05
+
+### Other
+
+- updated the following local packages: kiutils_kicad
+
 ## [0.1.2](https://github.com/Milind220/kiutils-rs/compare/kiutils-rs-v0.1.1...kiutils-rs-v0.1.2) - 2026-03-02
 
 ### Fixed
