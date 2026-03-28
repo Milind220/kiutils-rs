@@ -187,6 +187,8 @@ fn emit_fields(kind: &str, path: &Path, fields: &[InspectField], as_json: bool) 
 
 fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
     let ast = doc.ast();
+    let first_fp = ast.footprints.first();
+    let first_pad = first_fp.and_then(|f| f.pads.first());
     vec![
         field("version", json!(ast.version), format!("{:?}", ast.version)),
         field(
@@ -302,8 +304,38 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
         ),
         field(
             "first_footprint_pad_count",
-            json!(ast.footprints.first().map(|f| f.pad_count)),
-            format!("{:?}", ast.footprints.first().map(|f| f.pad_count)),
+            json!(ast.footprints.first().map(|f| f.pads.len())),
+            format!("{:?}", ast.footprints.first().map(|f| f.pads.len())),
+        ),
+        field(
+            "pcb.first_footprint.locked",
+            json!(first_fp.map(|f| f.locked)),
+            format!("{:?}", first_fp.map(|f| f.locked)),
+        ),
+        field(
+            "pcb.first_footprint.descr",
+            json!(first_fp.and_then(|f| f.descr.clone())),
+            format!("{:?}", first_fp.and_then(|f| f.descr.clone())),
+        ),
+        field(
+            "pcb.first_footprint.attr_count",
+            json!(first_fp.map(|f| f.attr.len())),
+            format!("{:?}", first_fp.map(|f| f.attr.len())),
+        ),
+        field(
+            "pcb.first_footprint.model_count",
+            json!(first_fp.map(|f| f.models.len())),
+            format!("{:?}", first_fp.map(|f| f.models.len())),
+        ),
+        field(
+            "pcb.first_pad.roundrect_rratio",
+            json!(first_pad.and_then(|p| p.roundrect_rratio)),
+            format!("{:?}", first_pad.and_then(|p| p.roundrect_rratio)),
+        ),
+        field(
+            "pcb.first_pad.clearance",
+            json!(first_pad.and_then(|p| p.clearance)),
+            format!("{:?}", first_pad.and_then(|p| p.clearance)),
         ),
         field(
             "first_segment_layer",
@@ -466,6 +498,27 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
             ),
         ),
         field(
+            "pcb.setup.pad_to_paste_clearance",
+            json!(ast.setup.as_ref().and_then(|s| s.pad_to_paste_clearance)),
+            format!(
+                "{:?}",
+                ast.setup.as_ref().and_then(|s| s.pad_to_paste_clearance)
+            ),
+        ),
+        field(
+            "pcb.setup.pad_to_paste_clearance_ratio",
+            json!(ast
+                .setup
+                .as_ref()
+                .and_then(|s| s.pad_to_paste_clearance_ratio)),
+            format!(
+                "{:?}",
+                ast.setup
+                    .as_ref()
+                    .and_then(|s| s.pad_to_paste_clearance_ratio)
+            ),
+        ),
+        field(
             "has_embedded_files",
             json!(ast.has_embedded_files),
             ast.has_embedded_files.to_string(),
@@ -495,6 +548,11 @@ fn pcb_fields(doc: &kiutils_kicad::PcbDocument) -> Vec<InspectField> {
             "graphic_count",
             json!(ast.graphic_count),
             ast.graphic_count.to_string(),
+        ),
+        field(
+            "pcb.image_count",
+            json!(ast.image_count),
+            ast.image_count.to_string(),
         ),
         field(
             "gr_line_count",
@@ -799,6 +857,57 @@ fn footprint_fields(doc: &kiutils_kicad::FootprintDocument) -> Vec<InspectField>
             ast.fp_text_box_count.to_string(),
         ),
         field(
+            "footprint.locked",
+            json!(ast.locked),
+            ast.locked.to_string(),
+        ),
+        field(
+            "footprint.placed",
+            json!(ast.placed),
+            ast.placed.to_string(),
+        ),
+        field("footprint.attr", json!(ast.attr), format!("{:?}", ast.attr)),
+        field(
+            "footprint.reference",
+            json!(ast.reference),
+            format!("{:?}", ast.reference),
+        ),
+        field(
+            "footprint.value",
+            json!(ast.value),
+            format!("{:?}", ast.value),
+        ),
+        field(
+            "footprint.property_count",
+            json!(ast.properties.len()),
+            ast.properties.len().to_string(),
+        ),
+        field(
+            "footprint.pad_details_count",
+            json!(ast.pads.len()),
+            ast.pads.len().to_string(),
+        ),
+        field(
+            "footprint.model_details_count",
+            json!(ast.models.len()),
+            ast.models.len().to_string(),
+        ),
+        field(
+            "footprint.zone_details_count",
+            json!(ast.zones.len()),
+            ast.zones.len().to_string(),
+        ),
+        field(
+            "footprint.group_details_count",
+            json!(ast.groups.len()),
+            ast.groups.len().to_string(),
+        ),
+        field(
+            "footprint.graphic_details_count",
+            json!(ast.graphics.len()),
+            ast.graphics.len().to_string(),
+        ),
+        field(
             "unknown_count",
             json!(ast.unknown_nodes.len()),
             ast.unknown_nodes.len().to_string(),
@@ -1049,6 +1158,51 @@ fn schematic_fields(doc: &kiutils_kicad::SchematicDocument) -> Vec<InspectField>
             ast.symbol_instance_count.to_string(),
         ),
         field(
+            "schematic.symbol_details_count",
+            json!(ast.symbols.len()),
+            ast.symbols.len().to_string(),
+        ),
+        field(
+            "schematic.sheet_details_count",
+            json!(ast.sheets.len()),
+            ast.sheets.len().to_string(),
+        ),
+        field(
+            "schematic.junction_details_count",
+            json!(ast.junctions.len()),
+            ast.junctions.len().to_string(),
+        ),
+        field(
+            "schematic.wire_details_count",
+            json!(ast.wires.len()),
+            ast.wires.len().to_string(),
+        ),
+        field(
+            "schematic.label_details_count",
+            json!(ast.labels.len()),
+            ast.labels.len().to_string(),
+        ),
+        field(
+            "schematic.text_details_count",
+            json!(ast.texts.len()),
+            ast.texts.len().to_string(),
+        ),
+        field(
+            "schematic.image_details_count",
+            json!(ast.images.len()),
+            ast.images.len().to_string(),
+        ),
+        field(
+            "schematic.symbol_instance_parsed_count",
+            json!(ast.symbol_instances_parsed.len()),
+            ast.symbol_instances_parsed.len().to_string(),
+        ),
+        field(
+            "schematic.sheet_instance_count_parsed",
+            json!(ast.sheet_instances.len()),
+            ast.sheet_instances.len().to_string(),
+        ),
+        field(
             "unknown_count",
             json!(ast.unknown_nodes.len()),
             ast.unknown_nodes.len().to_string(),
@@ -1094,6 +1248,7 @@ fn inspect_symbol(opts: &Opts) -> Result<(), String> {
 
 fn symbol_fields(doc: &kiutils_kicad::SymbolLibDocument) -> Vec<InspectField> {
     let ast = doc.ast();
+    let first_sym = ast.symbols.first();
     vec![
         field("version", json!(ast.version), format!("{:?}", ast.version)),
         field(
@@ -1125,6 +1280,36 @@ fn symbol_fields(doc: &kiutils_kicad::SymbolLibDocument) -> Vec<InspectField> {
             "first_symbol_name",
             json!(ast.symbols.first().and_then(|s| s.name.clone())),
             format!("{:?}", ast.symbols.first().and_then(|s| s.name.clone())),
+        ),
+        field(
+            "symbol.first.property_details_count",
+            json!(first_sym.map(|s| s.properties.len())),
+            format!("{:?}", first_sym.map(|s| s.properties.len())),
+        ),
+        field(
+            "symbol.first.pin_details_count",
+            json!(first_sym.map(|s| s.pins.len())),
+            format!("{:?}", first_sym.map(|s| s.pins.len())),
+        ),
+        field(
+            "symbol.first.unit_details_count",
+            json!(first_sym.map(|s| s.units.len())),
+            format!("{:?}", first_sym.map(|s| s.units.len())),
+        ),
+        field(
+            "symbol.first.graphic_details_count",
+            json!(first_sym.map(|s| s.graphics.len())),
+            format!("{:?}", first_sym.map(|s| s.graphics.len())),
+        ),
+        field(
+            "symbol.first.extends",
+            json!(first_sym.and_then(|s| s.extends.clone())),
+            format!("{:?}", first_sym.and_then(|s| s.extends.clone())),
+        ),
+        field(
+            "symbol.first.power",
+            json!(first_sym.map(|s| s.power)),
+            format!("{:?}", first_sym.map(|s| s.power)),
         ),
         field(
             "unknown_count",
@@ -1305,6 +1490,7 @@ fn fplib_fields(doc: &kiutils_kicad::FpLibTableDocument) -> Vec<InspectField> {
 
 fn dru_fields(doc: &kiutils_kicad::DesignRulesDocument) -> Vec<InspectField> {
     let ast = doc.ast();
+    let first_rule = ast.rules.first();
     vec![
         field("version", json!(ast.version), format!("{:?}", ast.version)),
         field(
@@ -1323,9 +1509,24 @@ fn dru_fields(doc: &kiutils_kicad::DesignRulesDocument) -> Vec<InspectField> {
             ast.rules_with_layer_count.to_string(),
         ),
         field(
+            "dru.severity_count",
+            json!(ast.severity_count),
+            ast.severity_count.to_string(),
+        ),
+        field(
             "first_rule_name",
             json!(ast.rules.first().and_then(|r| r.name.clone())),
             format!("{:?}", ast.rules.first().and_then(|r| r.name.clone())),
+        ),
+        field(
+            "dru.first_rule.constraint_count",
+            json!(first_rule.map(|r| r.constraints.len())),
+            format!("{:?}", first_rule.map(|r| r.constraints.len())),
+        ),
+        field(
+            "dru.first_rule.severity",
+            json!(first_rule.and_then(|r| r.severity.clone())),
+            format!("{:?}", first_rule.and_then(|r| r.severity.clone())),
         ),
         field(
             "rule_count",
@@ -1405,6 +1606,31 @@ fn worksheet_fields(doc: &kiutils_kicad::WorksheetDocument) -> Vec<InspectField>
             "polygon_count",
             json!(ast.polygon_count),
             ast.polygon_count.to_string(),
+        ),
+        field(
+            "worksheet.tbtext_details_count",
+            json!(ast.tbtexts.len()),
+            ast.tbtexts.len().to_string(),
+        ),
+        field(
+            "worksheet.line_details_count",
+            json!(ast.lines.len()),
+            ast.lines.len().to_string(),
+        ),
+        field(
+            "worksheet.rect_details_count",
+            json!(ast.rects.len()),
+            ast.rects.len().to_string(),
+        ),
+        field(
+            "worksheet.polygon_details_count",
+            json!(ast.polygons.len()),
+            ast.polygons.len().to_string(),
+        ),
+        field(
+            "worksheet.bitmap_count",
+            json!(ast.bitmap_count),
+            ast.bitmap_count.to_string(),
         ),
         field(
             "unknown_count",

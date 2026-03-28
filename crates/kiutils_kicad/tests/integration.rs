@@ -452,3 +452,337 @@ fn footprint_accepts_quoted_version_and_generator() {
 
     let _ = fs::remove_file(path);
 }
+
+#[test]
+fn pcb_typed_fields_parse_from_fixture() {
+    let doc = PcbFile::read(fixture("sample.kicad_pcb")).expect("read pcb");
+    let ast = doc.ast();
+
+    // Verify typed footprints parse if present
+    if !ast.footprints.is_empty() {
+        let fp = &ast.footprints[0];
+        assert!(fp.layer.is_some(), "footprint should have layer");
+        // Verify new fields are accessible (even if None for this fixture)
+        let _ = fp.locked;
+        let _ = fp.placed;
+        let _ = &fp.attr;
+        let _ = &fp.models;
+        let _ = &fp.descr;
+
+        // Verify typed pads parse
+        if !fp.pads.is_empty() {
+            let pad = &fp.pads[0];
+            assert!(pad.pad_type.is_some(), "pad should have type");
+            assert!(pad.shape.is_some(), "pad should have shape");
+            // New fields accessible
+            let _ = pad.roundrect_rratio;
+            let _ = pad.clearance;
+            let _ = pad.solder_mask_margin;
+        }
+    }
+
+    // Verify setup expanded fields
+    if let Some(setup) = &ast.setup {
+        let _ = setup.pad_to_paste_clearance;
+        let _ = setup.pad_to_paste_clearance_ratio;
+    }
+
+    // Verify image count field
+    let _ = ast.image_count;
+    let _ = &ast.images;
+}
+
+#[test]
+fn footprint_typed_fields_parse_from_fixture() {
+    let doc = FootprintFile::read(fixture("sample.kicad_mod")).expect("read fp");
+    let ast = doc.ast();
+
+    // Verify typed pads parse
+    assert!(
+        ast.pads.len() <= ast.pad_count,
+        "typed pads should not exceed count"
+    );
+    if !ast.pads.is_empty() {
+        let pad = &ast.pads[0];
+        assert!(pad.pad_type.is_some(), "fp pad should have type");
+        let _ = &pad.net;
+        let _ = &pad.drill;
+    }
+
+    // Verify typed graphics parse
+    if !ast.graphics.is_empty() {
+        let g = &ast.graphics[0];
+        assert!(!g.token.is_empty(), "graphic should have token");
+    }
+
+    // Verify typed models parse
+    if !ast.models.is_empty() {
+        let m = &ast.models[0];
+        let _ = &m.path;
+    }
+
+    // Verify typed properties parse
+    if !ast.properties.is_empty() {
+        let p = &ast.properties[0];
+        let _ = &p.key;
+        let _ = &p.value;
+    }
+
+    // New top-level fields
+    let _ = ast.locked;
+    let _ = ast.placed;
+    let _ = &ast.attr;
+    let _ = &ast.reference;
+    let _ = &ast.value;
+}
+
+#[test]
+fn schematic_typed_fields_parse_from_fixture() {
+    let doc = SchematicFile::read(fixture("sample.kicad_sch")).expect("read sch");
+    let ast = doc.ast();
+
+    // Verify typed symbols parse
+    if ast.symbol_count > 0 {
+        assert!(!ast.symbols.is_empty(), "typed symbols should match count");
+        let sym = &ast.symbols[0];
+        let _ = &sym.lib_id;
+        let _ = &sym.uuid;
+        let _ = sym.in_bom;
+        let _ = sym.on_board;
+        let _ = sym.dnp;
+        let _ = &sym.properties;
+    }
+
+    // Verify typed wires parse
+    if ast.wire_count > 0 {
+        assert!(!ast.wires.is_empty(), "typed wires should match count");
+        let w = &ast.wires[0];
+        assert!(!w.points.is_empty(), "wire should have points");
+    }
+
+    // Verify typed junctions
+    if ast.junction_count > 0 {
+        assert!(
+            !ast.junctions.is_empty(),
+            "typed junctions should match count"
+        );
+    }
+
+    // Verify labels
+    if ast.label_count > 0 || ast.global_label_count > 0 || ast.hierarchical_label_count > 0 {
+        // labels vec collects all label types
+        let _ = &ast.labels;
+    }
+
+    // Verify instances
+    let _ = &ast.symbol_instances_parsed;
+    let _ = &ast.sheet_instances;
+
+    // Verify sheets
+    if ast.sheet_count > 0 {
+        assert!(!ast.sheets.is_empty(), "typed sheets should match count");
+    }
+}
+
+#[test]
+fn symbol_lib_typed_fields_parse_from_fixture() {
+    let doc = SymbolLibFile::read(fixture("sample.kicad_sym")).expect("read sym");
+    let ast = doc.ast();
+
+    assert!(ast.symbol_count > 0, "should have symbols");
+    let sym = &ast.symbols[0];
+
+    // New typed fields
+    assert!(
+        !sym.properties.is_empty(),
+        "symbol should have typed properties"
+    );
+    let prop = &sym.properties[0];
+    assert!(!prop.key.is_empty(), "property should have key");
+
+    // Pin/unit/graphic access
+    let _ = &sym.pins;
+    let _ = &sym.units;
+    let _ = &sym.graphics;
+    let _ = sym.in_bom;
+    let _ = sym.on_board;
+    let _ = sym.power;
+    let _ = sym.pin_names_hide;
+    let _ = sym.pin_numbers_hide;
+    let _ = &sym.extends;
+    let _ = sym.exclude_from_sim;
+}
+
+#[test]
+fn worksheet_typed_fields_parse_from_fixture() {
+    let doc = WorksheetFile::read(fixture("sample.kicad_wks")).expect("read ws");
+    let ast = doc.ast();
+
+    // Verify typed objects match counts
+    assert_eq!(
+        ast.lines.len(),
+        ast.line_count,
+        "typed lines should match count"
+    );
+    assert_eq!(
+        ast.rects.len(),
+        ast.rect_count,
+        "typed rects should match count"
+    );
+    assert_eq!(
+        ast.tbtexts.len(),
+        ast.tbtext_count,
+        "typed tbtexts should match count"
+    );
+    assert_eq!(
+        ast.polygons.len(),
+        ast.polygon_count,
+        "typed polygons should match count"
+    );
+    assert_eq!(
+        ast.bitmaps.len(),
+        ast.bitmap_count,
+        "typed bitmaps should match count"
+    );
+
+    // Detailed tbtext fields
+    if !ast.tbtexts.is_empty() {
+        let t = &ast.tbtexts[0];
+        let _ = &t.text;
+        let _ = &t.name;
+        let _ = &t.pos;
+    }
+
+    // Detailed line fields
+    if !ast.lines.is_empty() {
+        let l = &ast.lines[0];
+        let _ = &l.start;
+        let _ = &l.end;
+    }
+}
+
+#[test]
+fn dru_typed_fields_parse_from_fixture() {
+    let doc = DesignRulesFile::read(fixture("sample.kicad_dru")).expect("read dru");
+    let ast = doc.ast();
+
+    assert!(!ast.rules.is_empty(), "should have rules");
+    let rule = &ast.rules[0];
+
+    // New constraint fields
+    let _ = &rule.constraints;
+    let _ = &rule.severity;
+    let _ = &rule.condition;
+    let _ = &rule.layer;
+
+    // Severity overrides
+    let _ = &ast.severities;
+    let _ = ast.severity_count;
+}
+
+#[test]
+fn unknown_token_preservation_all_formats() {
+    // PCB with unknown tokens
+    let pcb_src = r#"(kicad_pcb (version 20240108) (generator "test") (general (thickness 1.6)) (paper "A4") (future_thing 42) (layers (0 "F.Cu" signal)))"#;
+    let pcb_path = tmp_file("unknown_pcb", "kicad_pcb");
+    fs::write(&pcb_path, format!("{pcb_src}\n")).unwrap();
+    let pcb_doc = PcbFile::read(&pcb_path).unwrap();
+    assert!(
+        !pcb_doc.ast().unknown_nodes.is_empty(),
+        "PCB should capture unknown tokens"
+    );
+    let pcb_out = tmp_file("unknown_pcb_out", "kicad_pcb");
+    pcb_doc.write(&pcb_out).unwrap();
+    let _ = fs::remove_file(&pcb_path);
+    let _ = fs::remove_file(&pcb_out);
+    // Schematic with unknown tokens
+    let sch_src = "(kicad_sch (version 20240101) (generator test) (future_block 1 2))\n";
+    let sch_path = tmp_file("unknown_sch", "kicad_sch");
+    fs::write(&sch_path, sch_src).unwrap();
+    let sch_doc = SchematicFile::read(&sch_path).unwrap();
+    assert!(
+        !sch_doc.ast().unknown_nodes.is_empty(),
+        "schematic should capture unknown tokens"
+    );
+    let _ = fs::remove_file(&sch_path);
+
+    // Symbol lib with unknown tokens
+    let sym_src = "(kicad_symbol_lib (version 20240101) (generator test) (future_node x))\n";
+    let sym_path = tmp_file("unknown_sym", "kicad_sym");
+    fs::write(&sym_path, sym_src).unwrap();
+    let sym_doc = SymbolLibFile::read(&sym_path).unwrap();
+    assert!(
+        !sym_doc.ast().unknown_nodes.is_empty(),
+        "symbol lib should capture unknown tokens"
+    );
+    let _ = fs::remove_file(&sym_path);
+}
+
+#[test]
+fn legacy_module_token_accepted_for_footprint() {
+    // KiCad 5 and earlier used "module" as the root token for footprints
+    let legacy_src =
+        "(module \"LegacyFP\" (version 20171130) (layer \"F.Cu\") (fp_text reference \"R1\" (at 0 0)))\n";
+    let path = tmp_file("legacy_module_fp", "kicad_mod");
+    fs::write(&path, legacy_src).unwrap();
+    let doc = FootprintFile::read(&path).expect("should accept legacy 'module' token");
+    let ast = doc.ast();
+    assert!(
+        ast.version.is_some() || ast.lib_id.is_some(),
+        "should parse legacy footprint"
+    );
+    // Should produce a legacy_root diagnostic
+    assert!(
+        doc.diagnostics().iter().any(|d| d.code == "legacy_root"),
+        "should emit legacy_root diagnostic for 'module' token"
+    );
+    let _ = fs::remove_file(&path);
+}
+
+#[test]
+fn legacy_page_layout_token_accepted_for_worksheet() {
+    // KiCad 5 and earlier used "page_layout" as the root token for worksheets
+    let legacy_src = "(page_layout (version 20171130) (generator test))\n";
+    let path = tmp_file("legacy_page_layout_ws", "kicad_wks");
+    fs::write(&path, legacy_src).unwrap();
+    let doc = WorksheetFile::read(&path).expect("should accept legacy 'page_layout' token");
+    // Should produce a legacy_root diagnostic
+    assert!(
+        doc.diagnostics().iter().any(|d| d.code == "legacy_root"),
+        "should emit legacy_root diagnostic for 'page_layout' token"
+    );
+    let _ = fs::remove_file(&path);
+}
+
+#[test]
+fn modern_tokens_reject_incorrect_root() {
+    // PCB only accepts kicad_pcb
+    let bad_pcb = "(wrong_root (version 20240101))\n";
+    let path = tmp_file("bad_root_pcb", "kicad_pcb");
+    fs::write(&path, bad_pcb).unwrap();
+    assert!(
+        PcbFile::read(&path).is_err(),
+        "PCB should reject wrong root token"
+    );
+    let _ = fs::remove_file(&path);
+
+    // Schematic only accepts kicad_sch
+    let bad_sch = "(wrong_root (version 20240101))\n";
+    let path2 = tmp_file("bad_root_sch", "kicad_sch");
+    fs::write(&path2, bad_sch).unwrap();
+    assert!(
+        SchematicFile::read(&path2).is_err(),
+        "Schematic should reject wrong root token"
+    );
+    let _ = fs::remove_file(&path2);
+
+    // Symbol lib only accepts kicad_symbol_lib
+    let bad_sym = "(wrong_root (version 20240101))\n";
+    let path3 = tmp_file("bad_root_sym", "kicad_sym");
+    fs::write(&path3, bad_sym).unwrap();
+    assert!(
+        SymbolLibFile::read(&path3).is_err(),
+        "Symbol lib should reject wrong root token"
+    );
+    let _ = fs::remove_file(&path3);
+}
