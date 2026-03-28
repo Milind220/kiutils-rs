@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use kiutils_sexpr::{parse_one, CstDocument, Node};
+use kiutils_sexpr::{parse_one, Atom, CstDocument, Node};
 
 use crate::diagnostic::{Diagnostic, Severity};
 use crate::sexpr_edit::{
@@ -9,14 +9,14 @@ use crate::sexpr_edit::{
     upsert_scalar, upsert_section_child_node, upsert_section_child_scalar,
 };
 use crate::sexpr_utils::{
-    atom_as_f64, head_of, second_atom_f64, second_atom_i32, second_atom_string,
+    atom_as_f64, atom_as_string, head_of, second_atom_f64, second_atom_i32, second_atom_string,
 };
 use crate::version_diag::collect_version_diagnostics;
 use crate::{Error, UnknownNode, WriteMode};
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct WorksheetSetupSummary {
+pub struct WorksheetSetup {
     pub text_size: Option<[f64; 2]>,
     pub line_width: Option<f64>,
     pub text_line_width: Option<f64>,
@@ -28,16 +28,85 @@ pub struct WorksheetSetupSummary {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct WsTbtext {
+    pub text: Option<String>,
+    pub name: Option<String>,
+    pub pos: Option<[f64; 2]>,
+    pub font_size: Option<[f64; 2]>,
+    pub justify: Option<String>,
+    pub max_len: Option<f64>,
+    pub max_height: Option<f64>,
+    pub repeat_count: Option<i32>,
+    pub incr_label: Option<i32>,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct WsLine {
+    pub name: Option<String>,
+    pub start: Option<[f64; 2]>,
+    pub end: Option<[f64; 2]>,
+    pub repeat_count: Option<i32>,
+    pub incr_x: Option<f64>,
+    pub incr_y: Option<f64>,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct WsRect {
+    pub name: Option<String>,
+    pub start: Option<[f64; 2]>,
+    pub end: Option<[f64; 2]>,
+    pub repeat_count: Option<i32>,
+    pub incr_x: Option<f64>,
+    pub incr_y: Option<f64>,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct WsPolygon {
+    pub name: Option<String>,
+    pub pos: Option<[f64; 2]>,
+    pub corner: Option<String>,
+    pub rotate: Option<f64>,
+    pub repeat_count: Option<i32>,
+    pub incr_x: Option<f64>,
+    pub incr_y: Option<f64>,
+    pub point_count: usize,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct WsBitmap {
+    pub name: Option<String>,
+    pub pos: Option<[f64; 2]>,
+    pub scale: Option<f64>,
+    pub repeat_count: Option<i32>,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct WorksheetAst {
     pub version: Option<i32>,
     pub generator: Option<String>,
     pub generator_version: Option<String>,
     pub has_setup: bool,
-    pub setup: Option<WorksheetSetupSummary>,
+    pub setup: Option<WorksheetSetup>,
     pub line_count: usize,
+    pub lines: Vec<WsLine>,
     pub rect_count: usize,
+    pub rects: Vec<WsRect>,
     pub tbtext_count: usize,
+    pub tbtexts: Vec<WsTbtext>,
     pub polygon_count: usize,
+    pub polygons: Vec<WsPolygon>,
+    pub bitmap_count: usize,
+    pub bitmaps: Vec<WsBitmap>,
     pub unknown_nodes: Vec<UnknownNode>,
 }
 
@@ -187,9 +256,15 @@ fn parse_ast(cst: &CstDocument) -> WorksheetAst {
     let mut has_setup = false;
     let mut setup = None;
     let mut line_count = 0usize;
+    let mut lines = Vec::new();
     let mut rect_count = 0usize;
+    let mut rects = Vec::new();
     let mut tbtext_count = 0usize;
+    let mut tbtexts = Vec::new();
     let mut polygon_count = 0usize;
+    let mut polygons = Vec::new();
+    let mut bitmap_count = 0usize;
+    let mut bitmaps = Vec::new();
     let mut unknown_nodes = Vec::new();
 
     if let Some(Node::List { items, .. }) = cst.nodes.first() {
@@ -200,12 +275,28 @@ fn parse_ast(cst: &CstDocument) -> WorksheetAst {
                 Some("generator_version") => generator_version = second_atom_string(item),
                 Some("setup") => {
                     has_setup = true;
-                    setup = Some(parse_setup_summary(item));
+                    setup = Some(parse_setup(item));
                 }
-                Some("line") => line_count += 1,
-                Some("rect") => rect_count += 1,
-                Some("tbtext") => tbtext_count += 1,
-                Some("polygon") => polygon_count += 1,
+                Some("line") => {
+                    line_count += 1;
+                    lines.push(parse_ws_line(item));
+                }
+                Some("rect") => {
+                    rect_count += 1;
+                    rects.push(parse_ws_rect(item));
+                }
+                Some("tbtext") => {
+                    tbtext_count += 1;
+                    tbtexts.push(parse_ws_tbtext(item));
+                }
+                Some("polygon") => {
+                    polygon_count += 1;
+                    polygons.push(parse_ws_polygon(item));
+                }
+                Some("bitmap") => {
+                    bitmap_count += 1;
+                    bitmaps.push(parse_ws_bitmap(item));
+                }
                 _ => {
                     if let Some(unknown) = UnknownNode::from_node(item) {
                         unknown_nodes.push(unknown);
@@ -222,14 +313,20 @@ fn parse_ast(cst: &CstDocument) -> WorksheetAst {
         has_setup,
         setup,
         line_count,
+        lines,
         rect_count,
+        rects,
         tbtext_count,
+        tbtexts,
         polygon_count,
+        polygons,
+        bitmap_count,
+        bitmaps,
         unknown_nodes,
     }
 }
 
-fn parse_setup_summary(node: &Node) -> WorksheetSetupSummary {
+fn parse_setup(node: &Node) -> WorksheetSetup {
     let mut text_size = None;
     let mut line_width = None;
     let mut text_line_width = None;
@@ -253,7 +350,7 @@ fn parse_setup_summary(node: &Node) -> WorksheetSetupSummary {
         }
     }
 
-    WorksheetSetupSummary {
+    WorksheetSetup {
         text_size,
         line_width,
         text_line_width,
@@ -265,6 +362,253 @@ fn parse_setup_summary(node: &Node) -> WorksheetSetupSummary {
 }
 
 fn parse_pair(node: &Node) -> Option<[f64; 2]> {
+    let Node::List { items, .. } = node else {
+        return None;
+    };
+    let x = items.get(1).and_then(atom_as_f64)?;
+    let y = items.get(2).and_then(atom_as_f64)?;
+    Some([x, y])
+}
+
+fn parse_ws_tbtext(node: &Node) -> WsTbtext {
+    let mut text = if let Node::List { items, .. } = node {
+        items.get(1).and_then(|item| match item {
+            Node::Atom {
+                atom: Atom::Symbol(value),
+                ..
+            }
+            | Node::Atom {
+                atom: Atom::Quoted(value),
+                ..
+            } => Some(value.clone()),
+            _ => None,
+        })
+    } else {
+        None
+    };
+    let mut name = None;
+    let mut pos = None;
+    let mut font_size = None;
+    let mut justify = None;
+    let mut max_len = None;
+    let mut max_height = None;
+    let mut repeat_count = None;
+    let mut incr_label = None;
+    let mut comment = None;
+
+    if let Node::List { items, .. } = node {
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("text") => text = second_atom_string(child),
+                Some("name") => name = second_atom_string(child),
+                Some("pos") => pos = parse_ws_xy(child),
+                Some("font") => {
+                    if let Node::List {
+                        items: font_items, ..
+                    } = child
+                    {
+                        for font_child in font_items.iter().skip(1) {
+                            if matches!(head_of(font_child), Some("size")) {
+                                font_size = parse_ws_xy(font_child);
+                            }
+                        }
+                    }
+                }
+                Some("fontsize") => font_size = parse_ws_xy(child),
+                Some("justify") => {
+                    if let Some(value) = second_atom_string(child) {
+                        justify = Some(value);
+                    } else if let Node::List {
+                        items: justify_items,
+                        ..
+                    } = child
+                    {
+                        let value = justify_items
+                            .iter()
+                            .skip(1)
+                            .filter_map(atom_as_string)
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        if !value.is_empty() {
+                            justify = Some(value);
+                        }
+                    }
+                }
+                Some("maxlen") => max_len = second_atom_f64(child),
+                Some("maxheight") => max_height = second_atom_f64(child),
+                Some("repeat") => repeat_count = second_atom_i32(child),
+                Some("incrlabel") => incr_label = second_atom_i32(child),
+                Some("comment") => comment = second_atom_string(child),
+                _ => {}
+            }
+        }
+    }
+
+    WsTbtext {
+        text,
+        name,
+        pos,
+        font_size,
+        justify,
+        max_len,
+        max_height,
+        repeat_count,
+        incr_label,
+        comment,
+    }
+}
+
+fn parse_ws_line(node: &Node) -> WsLine {
+    let mut name = None;
+    let mut start = None;
+    let mut end = None;
+    let mut repeat_count = None;
+    let mut incr_x = None;
+    let mut incr_y = None;
+    let mut comment = None;
+
+    if let Node::List { items, .. } = node {
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("name") => name = second_atom_string(child),
+                Some("start") => start = parse_ws_xy(child),
+                Some("end") => end = parse_ws_xy(child),
+                Some("repeat") => repeat_count = second_atom_i32(child),
+                Some("incrx") | Some("incr_x") => incr_x = second_atom_f64(child),
+                Some("incry") | Some("incr_y") => incr_y = second_atom_f64(child),
+                Some("comment") => comment = second_atom_string(child),
+                _ => {}
+            }
+        }
+    }
+
+    WsLine {
+        name,
+        start,
+        end,
+        repeat_count,
+        incr_x,
+        incr_y,
+        comment,
+    }
+}
+
+fn parse_ws_rect(node: &Node) -> WsRect {
+    let mut name = None;
+    let mut start = None;
+    let mut end = None;
+    let mut repeat_count = None;
+    let mut incr_x = None;
+    let mut incr_y = None;
+    let mut comment = None;
+
+    if let Node::List { items, .. } = node {
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("name") => name = second_atom_string(child),
+                Some("start") => start = parse_ws_xy(child),
+                Some("end") => end = parse_ws_xy(child),
+                Some("repeat") => repeat_count = second_atom_i32(child),
+                Some("incrx") | Some("incr_x") => incr_x = second_atom_f64(child),
+                Some("incry") | Some("incr_y") => incr_y = second_atom_f64(child),
+                Some("comment") => comment = second_atom_string(child),
+                _ => {}
+            }
+        }
+    }
+
+    WsRect {
+        name,
+        start,
+        end,
+        repeat_count,
+        incr_x,
+        incr_y,
+        comment,
+    }
+}
+
+fn parse_ws_polygon(node: &Node) -> WsPolygon {
+    let mut name = None;
+    let mut pos = None;
+    let mut corner = None;
+    let mut rotate = None;
+    let mut repeat_count = None;
+    let mut incr_x = None;
+    let mut incr_y = None;
+    let mut point_count = 0usize;
+    let mut comment = None;
+
+    if let Node::List { items, .. } = node {
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("name") => name = second_atom_string(child),
+                Some("pos") => pos = parse_ws_xy(child),
+                Some("corner") => corner = second_atom_string(child),
+                Some("rotate") => rotate = second_atom_f64(child),
+                Some("repeat") => repeat_count = second_atom_i32(child),
+                Some("incrx") | Some("incr_x") => incr_x = second_atom_f64(child),
+                Some("incry") | Some("incr_y") => incr_y = second_atom_f64(child),
+                Some("pts") => {
+                    if let Node::List {
+                        items: pts_items, ..
+                    } = child
+                    {
+                        point_count = pts_items
+                            .iter()
+                            .filter(|node| matches!(head_of(node), Some("xy")))
+                            .count();
+                    }
+                }
+                Some("comment") => comment = second_atom_string(child),
+                _ => {}
+            }
+        }
+    }
+
+    WsPolygon {
+        name,
+        pos,
+        corner,
+        rotate,
+        repeat_count,
+        incr_x,
+        incr_y,
+        point_count,
+        comment,
+    }
+}
+
+fn parse_ws_bitmap(node: &Node) -> WsBitmap {
+    let mut name = None;
+    let mut pos = None;
+    let mut scale = None;
+    let mut repeat_count = None;
+    let mut comment = None;
+
+    if let Node::List { items, .. } = node {
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("name") => name = second_atom_string(child),
+                Some("pos") => pos = parse_ws_xy(child),
+                Some("scale") => scale = second_atom_f64(child),
+                Some("repeat") => repeat_count = second_atom_i32(child),
+                Some("comment") => comment = second_atom_string(child),
+                _ => {}
+            }
+        }
+    }
+
+    WsBitmap {
+        name,
+        pos,
+        scale,
+        repeat_count,
+        comment,
+    }
+}
+
+fn parse_ws_xy(node: &Node) -> Option<[f64; 2]> {
     let Node::List { items, .. } = node else {
         return None;
     };

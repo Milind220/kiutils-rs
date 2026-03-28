@@ -62,22 +62,23 @@ pub use kiutils_kicad::{
 };
 
 /// Design-rules (`.kicad_dru`) APIs.
-pub use kiutils_kicad::{DesignRuleSummary, DesignRulesAst, DesignRulesDocument, DesignRulesFile};
+pub use kiutils_kicad::{DesignRule, DesignRulesAst, DesignRulesDocument, DesignRulesFile};
 
 /// Footprint (`.kicad_mod`) APIs.
 pub use kiutils_kicad::{FootprintAst, FootprintDocument, FootprintFile};
 
 /// Library table (`fp-lib-table`, `sym-lib-table`) APIs.
 pub use kiutils_kicad::{
-    FpLibTableAst, FpLibTableDocument, FpLibTableFile, SymLibTableAst, SymLibTableDocument,
-    SymLibTableFile,
+    FpLibTableAst, FpLibTableDocument, FpLibTableFile, LibTableLibrary, SymLibTableAst,
+    SymLibTableDocument, SymLibTableFile,
 };
 
 /// PCB (`.kicad_pcb`) APIs.
 pub use kiutils_kicad::{
-    PcbArcSummary, PcbAst, PcbDimensionSummary, PcbDocument, PcbFile, PcbFootprintSummary,
-    PcbGeneratedSummary, PcbGraphicSummary, PcbGroupSummary, PcbLayer, PcbNet, PcbProperty,
-    PcbSegmentSummary, PcbSetupSummary, PcbTargetSummary, PcbViaSummary, PcbZoneSummary,
+    PcbArc, PcbAst, PcbDimension, PcbDocument, PcbFile, PcbFootprint, PcbFootprintModel,
+    PcbGeneral, PcbGeneratedItem, PcbGraphic, PcbGroup, PcbImage, PcbLayer, PcbNet, PcbPad,
+    PcbPadDrill, PcbPadNet, PcbPaper, PcbProperty, PcbSegment, PcbSetup, PcbTarget, PcbTitleBlock,
+    PcbVia, PcbZone,
 };
 
 /// Project (`.kicad_pro`) APIs.

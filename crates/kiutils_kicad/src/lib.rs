@@ -43,6 +43,38 @@
 //! - AST `*_count` fields are convenience counters, not strict stability promises.
 //! - Unknown-token diagnostics are developer-facing; summarize before showing end users.
 //! - `.kicad_dru` rule conditions are preserved as strings in v1.
+//!
+//! ## Token alias policy
+//!
+//! KiCad file formats have evolved over major versions, sometimes renaming root
+//! tokens or restructuring S-expression nodes. This crate follows a consistent
+//! policy for handling these differences:
+//!
+//! | Format | Modern token | Legacy alias | Behavior |
+//! |--------|-------------|--------------|----------|
+//! | PCB | `kicad_pcb` | _(none)_ | Only modern accepted |
+//! | Footprint | `footprint` | `module` | Both accepted; `legacy_root` diagnostic emitted |
+//! | Schematic | `kicad_sch` | _(none)_ | Only modern accepted |
+//! | Symbol lib | `kicad_symbol_lib` | _(none)_ | Only modern accepted |
+//! | Worksheet | `kicad_wks` | `page_layout` | Both accepted; `legacy_root` diagnostic emitted |
+//! | Design rules | `kicad_dru` | _(rootless)_ | Rootless format accepted |
+//! | Lib tables | `fp_lib_table` / `sym_lib_table` | _(none)_ | Only modern accepted |
+//!
+//! ### Parser guarantees
+//!
+//! 1. **Lossless round-trip**: Writing a parsed file with `WriteMode::Lossless` produces
+//!    byte-identical output to the original input, including whitespace and comments.
+//! 2. **Unknown token preservation**: Any S-expression node not recognized by the typed
+//!    AST parser is captured in `unknown_nodes` / `unknown_fields` vectors and preserved
+//!    through round-trip writes.
+//! 3. **Forward compatibility**: Files from newer KiCad versions parse without error;
+//!    unrecognized tokens land in unknown vectors and a `future_format` diagnostic is
+//!    emitted when the version number exceeds the known range.
+//! 4. **Legacy compatibility**: Files using legacy root tokens (see table above) parse
+//!    in compatibility mode with a `legacy_root` diagnostic to inform callers.
+//! 5. **Typed AST is read-only over CST**: The typed AST is derived from the CST on parse.
+//!    Mutations go through document setter APIs that modify the CST directly, then
+//!    re-derive the AST, ensuring CST remains the source of truth.
 
 mod batch;
 mod diagnostic;
@@ -65,25 +97,41 @@ mod write_mode;
 
 pub use batch::{read_pcbs, read_pcbs_from_refs};
 pub use diagnostic::{Diagnostic, Severity, Span};
-pub use dru::{DesignRuleSummary, DesignRulesAst, DesignRulesDocument, DesignRulesFile};
+pub use dru::{
+    DesignRule, DesignRulesAst, DesignRulesDocument, DesignRulesFile, DruConstraint, DruSeverity,
+};
 pub use error::Error;
-pub use footprint::{FootprintAst, FootprintDocument, FootprintFile};
+pub use footprint::{
+    FootprintAst, FootprintDocument, FootprintFile, FpGraphic, FpGroup, FpModel, FpPad, FpPadDrill,
+    FpPadNet, FpProperty, FpZone,
+};
 pub use lib_table::{
-    FpLibTableAst, FpLibTableDocument, FpLibTableFile, LibTableKind, SymLibTableAst,
-    SymLibTableDocument, SymLibTableFile,
+    FpLibTableAst, FpLibTableDocument, FpLibTableFile, LibTableKind, LibTableLibrary,
+    SymLibTableAst, SymLibTableDocument, SymLibTableFile,
 };
 pub use pcb::{
-    PcbArcSummary, PcbAst, PcbDimensionSummary, PcbDocument, PcbFile, PcbFootprintSummary,
-    PcbGeneratedSummary, PcbGraphicSummary, PcbGroupSummary, PcbLayer, PcbNet, PcbProperty,
-    PcbSegmentSummary, PcbSetupSummary, PcbTargetSummary, PcbViaSummary, PcbZoneSummary,
+    PcbArc, PcbAst, PcbDimension, PcbDocument, PcbFile, PcbFootprint, PcbFootprintModel,
+    PcbGeneral, PcbGeneratedItem, PcbGraphic, PcbGroup, PcbImage, PcbLayer, PcbNet, PcbPad,
+    PcbPadDrill, PcbPadNet, PcbPaper, PcbProperty, PcbSegment, PcbSetup, PcbTarget, PcbTitleBlock,
+    PcbVia, PcbZone,
 };
 pub use project::{ProjectAst, ProjectDocument, ProjectExtra, ProjectFile};
 pub use schematic::{
-    SchematicAst, SchematicDocument, SchematicFile, SchematicPaperSummary, SchematicSymbolInfo,
-    SchematicTitleBlockSummary,
+    SchematicArc, SchematicAst, SchematicBus, SchematicBusAlias, SchematicBusEntry,
+    SchematicCircle, SchematicDocument, SchematicFile, SchematicImage, SchematicJunction,
+    SchematicLabel, SchematicNetclassFlag, SchematicNoConnect, SchematicPaper, SchematicPolyline,
+    SchematicRectangle, SchematicRuleArea, SchematicSheet, SchematicSheetInstance, SchematicSymbol,
+    SchematicSymbolInfo, SchematicSymbolInstance, SchematicText, SchematicTitleBlock,
+    SchematicWire,
 };
-pub use symbol::{SymbolLibAst, SymbolLibDocument, SymbolLibFile, SymbolSummary};
+pub use symbol::{
+    SymGraphic, SymPin, SymProperty, SymUnit, Symbol, SymbolLibAst, SymbolLibDocument,
+    SymbolLibFile,
+};
 pub use unknown::{UnknownField, UnknownNode};
 pub use version::{KiCadSeries, VersionPolicy};
-pub use worksheet::{WorksheetAst, WorksheetDocument, WorksheetFile, WorksheetSetupSummary};
+pub use worksheet::{
+    WorksheetAst, WorksheetDocument, WorksheetFile, WorksheetSetup, WsBitmap, WsLine, WsPolygon,
+    WsRect, WsTbtext,
+};
 pub use write_mode::WriteMode;
