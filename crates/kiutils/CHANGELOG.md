@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/Milind220/kiutils-rs/compare/kiutils-rs-v0.1.3...kiutils-rs-v0.2.0) - 2026-03-29
+
+### Added
+
+- [**breaking**] replace summary ASTs with typed models across formats ([#25](https://github.com/Milind220/kiutils-rs/pull/25))
+
 ## [0.1.3](https://github.com/Milind220/kiutils-rs/compare/kiutils-rs-v0.1.2...kiutils-rs-v0.1.3) - 2026-03-05
 
 ### Other
