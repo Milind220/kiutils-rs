@@ -29,7 +29,7 @@ impl LibTableKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct LibTableLibrarySummary {
+pub struct LibTableLibrary {
     pub name: Option<String>,
     pub library_type: Option<String>,
     pub uri: Option<String>,
@@ -43,7 +43,7 @@ pub struct LibTableLibrarySummary {
 pub struct LibTableAst {
     pub kind: LibTableKind,
     pub version: Option<i32>,
-    pub libraries: Vec<LibTableLibrarySummary>,
+    pub libraries: Vec<LibTableLibrary>,
     pub library_count: usize,
     pub disabled_library_count: usize,
     pub unknown_nodes: Vec<UnknownNode>,
@@ -254,7 +254,7 @@ fn parse_ast(cst: &CstDocument, kind: LibTableKind) -> LibTableAst {
         for item in items.iter().skip(1) {
             match head_of(item) {
                 Some("version") => version = second_atom_i32(item),
-                Some("lib") => libraries.push(parse_library_summary(item)),
+                Some("lib") => libraries.push(parse_library(item)),
                 _ => {
                     if let Some(unknown) = UnknownNode::from_node(item) {
                         unknown_nodes.push(unknown);
@@ -277,7 +277,7 @@ fn parse_ast(cst: &CstDocument, kind: LibTableKind) -> LibTableAst {
     }
 }
 
-fn parse_library_summary(node: &Node) -> LibTableLibrarySummary {
+fn parse_library(node: &Node) -> LibTableLibrary {
     let mut name = None;
     let mut library_type = None;
     let mut uri = None;
@@ -299,7 +299,7 @@ fn parse_library_summary(node: &Node) -> LibTableLibrarySummary {
         }
     }
 
-    LibTableLibrarySummary {
+    LibTableLibrary {
         name,
         library_type,
         uri,

@@ -33,16 +33,89 @@ pub struct PcbNet {
     pub name: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbPadNet {
+    pub code: Option<i32>,
+    pub name: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbFootprintSummary {
+pub struct PcbPadDrill {
+    pub shape: Option<String>,
+    pub diameter: Option<f64>,
+    pub width: Option<f64>,
+    pub offset: Option<[f64; 2]>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbPad {
+    pub number: Option<String>,
+    pub pad_type: Option<String>,
+    pub shape: Option<String>,
+    pub at: Option<[f64; 2]>,
+    pub rotation: Option<f64>,
+    pub size: Option<[f64; 2]>,
+    pub layers: Vec<String>,
+    pub net: Option<PcbPadNet>,
+    pub drill: Option<PcbPadDrill>,
+    pub uuid: Option<String>,
+    pub pin_function: Option<String>,
+    pub pin_type: Option<String>,
+    pub locked: bool,
+    pub property: Option<String>,
+    pub remove_unused_layers: bool,
+    pub keep_end_layers: bool,
+    pub roundrect_rratio: Option<f64>,
+    pub chamfer_ratio: Option<f64>,
+    pub chamfer: Vec<String>,
+    pub die_length: Option<f64>,
+    pub solder_mask_margin: Option<f64>,
+    pub solder_paste_margin: Option<f64>,
+    pub solder_paste_margin_ratio: Option<f64>,
+    pub clearance: Option<f64>,
+    pub zone_connect: Option<i32>,
+    pub thermal_width: Option<f64>,
+    pub thermal_gap: Option<f64>,
+    pub custom_clearance: Option<String>,
+    pub custom_anchor: Option<String>,
+    pub custom_primitives: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbFootprintModel {
+    pub path: Option<String>,
+    pub at: Option<[f64; 3]>,
+    pub scale: Option<[f64; 3]>,
+    pub rotate: Option<[f64; 3]>,
+    pub hide: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbFootprint {
     pub lib_id: Option<String>,
     pub layer: Option<String>,
     pub at: Option<[f64; 2]>,
     pub rotation: Option<f64>,
     pub uuid: Option<String>,
-    pub property_count: usize,
-    pub pad_count: usize,
+    pub locked: bool,
+    pub placed: bool,
+    pub tedit: Option<String>,
+    pub path: Option<String>,
+    pub descr: Option<String>,
+    pub tags: Option<String>,
+    pub autoplace_cost90: Option<i32>,
+    pub autoplace_cost180: Option<i32>,
+    pub attr: Vec<String>,
+    pub private_layers: Vec<String>,
+    pub net_tie_pad_groups: Vec<Vec<String>>,
+    pub properties: Vec<PcbProperty>,
+    pub pads: Vec<PcbPad>,
+    pub models: Vec<PcbFootprintModel>,
     pub model_count: usize,
     pub zone_count: usize,
     pub group_count: usize,
@@ -61,7 +134,7 @@ pub struct PcbFootprintSummary {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbSegmentSummary {
+pub struct PcbSegment {
     pub start: Option<[f64; 2]>,
     pub end: Option<[f64; 2]>,
     pub width: Option<f64>,
@@ -73,7 +146,7 @@ pub struct PcbSegmentSummary {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbArcSummary {
+pub struct PcbArc {
     pub start: Option<[f64; 2]>,
     pub mid: Option<[f64; 2]>,
     pub end: Option<[f64; 2]>,
@@ -86,7 +159,7 @@ pub struct PcbArcSummary {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbViaSummary {
+pub struct PcbVia {
     pub at: Option<[f64; 2]>,
     pub size: Option<f64>,
     pub drill: Option<f64>,
@@ -102,7 +175,7 @@ pub struct PcbViaSummary {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbZoneSummary {
+pub struct PcbZone {
     pub net: Option<i32>,
     pub net_name: Option<String>,
     pub name: Option<String>,
@@ -117,7 +190,7 @@ pub struct PcbZoneSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbGeneratedSummary {
+pub struct PcbGeneratedItem {
     pub uuid: Option<String>,
     pub generated_type: Option<String>,
     pub name: Option<String>,
@@ -128,7 +201,7 @@ pub struct PcbGeneratedSummary {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbDimensionSummary {
+pub struct PcbDimension {
     pub dimension_type: Option<String>,
     pub layer: Option<String>,
     pub gr_text_count: usize,
@@ -137,7 +210,7 @@ pub struct PcbDimensionSummary {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbTargetSummary {
+pub struct PcbTarget {
     pub shape: Option<String>,
     pub at: Option<[f64; 2]>,
     pub size: Option<f64>,
@@ -147,7 +220,7 @@ pub struct PcbTargetSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbGroupSummary {
+pub struct PcbGroup {
     pub name: Option<String>,
     pub group_id: Option<String>,
     pub member_count: usize,
@@ -155,7 +228,7 @@ pub struct PcbGroupSummary {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbGraphicSummary {
+pub struct PcbGraphic {
     pub token: String,
     pub layer: Option<String>,
     pub text: Option<String>,
@@ -164,6 +237,24 @@ pub struct PcbGraphicSummary {
     pub center: Option<[f64; 2]>,
     pub uuid: Option<String>,
     pub locked: bool,
+    pub width: Option<f64>,
+    pub stroke_type: Option<String>,
+    pub fill_type: Option<String>,
+    pub at: Option<[f64; 2]>,
+    pub angle: Option<f64>,
+    pub font_size: Option<[f64; 2]>,
+    pub font_thickness: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PcbImage {
+    pub at: Option<[f64; 2]>,
+    pub layer: Option<String>,
+    pub scale: Option<f64>,
+    pub uuid: Option<String>,
+    pub locked: bool,
+    pub data: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,7 +266,7 @@ pub struct PcbProperty {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbSetupSummary {
+pub struct PcbSetup {
     pub has_stackup: bool,
     pub stackup_layer_count: usize,
     pub has_plot_settings: bool,
@@ -183,26 +274,34 @@ pub struct PcbSetupSummary {
     pub solder_mask_min_width: Option<f64>,
     pub aux_axis_origin: Option<[f64; 2]>,
     pub grid_origin: Option<[f64; 2]>,
+    pub pad_to_paste_clearance: Option<f64>,
+    pub pad_to_paste_clearance_ratio: Option<f64>,
+    pub allow_soldermask_bridges_in_fps: Option<bool>,
+    pub copper_finish: Option<String>,
+    pub dielectric_constraints: Option<bool>,
+    pub edge_connector: Option<String>,
+    pub castellated_pads: Option<bool>,
+    pub edge_plating: Option<bool>,
     pub setup_tokens: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbGeneralSummary {
+pub struct PcbGeneral {
     pub thickness: Option<f64>,
     pub legacy_teardrops: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbPaperSummary {
+pub struct PcbPaper {
     pub kind: Option<String>,
     pub width: Option<f64>,
     pub height: Option<f64>,
     pub orientation: Option<String>,
 }
 
-impl From<ParsedPaper> for PcbPaperSummary {
+impl From<ParsedPaper> for PcbPaper {
     fn from(value: ParsedPaper) -> Self {
         Self {
             kind: value.kind,
@@ -215,7 +314,7 @@ impl From<ParsedPaper> for PcbPaperSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PcbTitleBlockSummary {
+pub struct PcbTitleBlock {
     pub title: Option<String>,
     pub date: Option<String>,
     pub revision: Option<String>,
@@ -223,7 +322,7 @@ pub struct PcbTitleBlockSummary {
     pub comments: Vec<String>,
 }
 
-impl From<ParsedTitleBlock> for PcbTitleBlockSummary {
+impl From<ParsedTitleBlock> for PcbTitleBlock {
     fn from(value: ParsedTitleBlock) -> Self {
         Self {
             title: value.title,
@@ -244,27 +343,29 @@ pub struct PcbAst {
     pub has_general: bool,
     pub has_paper: bool,
     pub has_title_block: bool,
-    pub general: Option<PcbGeneralSummary>,
-    pub paper: Option<PcbPaperSummary>,
-    pub title_block: Option<PcbTitleBlockSummary>,
+    pub general: Option<PcbGeneral>,
+    pub paper: Option<PcbPaper>,
+    pub title_block: Option<PcbTitleBlock>,
     pub has_setup: bool,
-    pub setup: Option<PcbSetupSummary>,
+    pub setup: Option<PcbSetup>,
     pub has_embedded_fonts: bool,
     pub has_embedded_files: bool,
     pub embedded_file_count: usize,
     pub properties: Vec<PcbProperty>,
     pub layers: Vec<PcbLayer>,
     pub nets: Vec<PcbNet>,
-    pub footprints: Vec<PcbFootprintSummary>,
-    pub segments: Vec<PcbSegmentSummary>,
-    pub arcs: Vec<PcbArcSummary>,
-    pub vias: Vec<PcbViaSummary>,
-    pub zones: Vec<PcbZoneSummary>,
-    pub generated_items: Vec<PcbGeneratedSummary>,
-    pub dimensions: Vec<PcbDimensionSummary>,
-    pub targets: Vec<PcbTargetSummary>,
-    pub groups: Vec<PcbGroupSummary>,
-    pub graphics: Vec<PcbGraphicSummary>,
+    pub footprints: Vec<PcbFootprint>,
+    pub segments: Vec<PcbSegment>,
+    pub arcs: Vec<PcbArc>,
+    pub vias: Vec<PcbVia>,
+    pub zones: Vec<PcbZone>,
+    pub generated_items: Vec<PcbGeneratedItem>,
+    pub dimensions: Vec<PcbDimension>,
+    pub targets: Vec<PcbTarget>,
+    pub groups: Vec<PcbGroup>,
+    pub graphics: Vec<PcbGraphic>,
+    pub images: Vec<PcbImage>,
+    pub image_count: usize,
     pub layer_count: usize,
     pub property_count: usize,
     pub net_count: usize,
@@ -494,6 +595,8 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
     let mut targets = Vec::new();
     let mut groups = Vec::new();
     let mut graphics = Vec::new();
+    let mut images = Vec::new();
+    let mut image_count = 0usize;
     let mut layer_count = 0usize;
     let mut property_count = 0usize;
     let mut net_count = 0usize;
@@ -534,7 +637,7 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 }
                 Some("general") => {
                     has_general = true;
-                    general = Some(parse_general_summary(item));
+                    general = Some(parse_general(item));
                     collect_unrecognized_children(
                         item,
                         &["thickness", "legacy_teardrops"],
@@ -562,7 +665,7 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 }
                 Some("setup") => {
                     has_setup = true;
-                    setup = Some(parse_setup_summary(item));
+                    setup = Some(parse_setup(item));
                     collect_unrecognized_setup_children(item, &mut unknown_nodes);
                 }
                 Some("embedded_fonts") => has_embedded_fonts = true,
@@ -587,83 +690,87 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
                 }
                 Some("footprint") => {
                     footprint_count += 1;
-                    footprints.push(parse_footprint_summary(item));
+                    footprints.push(parse_footprint(item));
                 }
                 Some("segment") => {
                     trace_segment_count += 1;
-                    segments.push(parse_segment_summary(item));
+                    segments.push(parse_segment(item));
                 }
                 Some("arc") => {
                     trace_arc_count += 1;
-                    arcs.push(parse_arc_summary(item));
+                    arcs.push(parse_arc(item));
                 }
                 Some("via") => {
                     via_count += 1;
-                    vias.push(parse_via_summary(item));
+                    vias.push(parse_via(item));
                 }
                 Some("zone") => {
                     zone_count += 1;
-                    zones.push(parse_zone_summary(item));
+                    zones.push(parse_zone(item));
                 }
                 Some("dimension") => {
                     dimension_count += 1;
-                    dimensions.push(parse_dimension_summary(item));
+                    dimensions.push(parse_dimension(item));
                 }
                 Some("target") => {
                     target_count += 1;
-                    targets.push(parse_target_summary(item));
+                    targets.push(parse_target(item));
                 }
                 Some("group") => {
                     group_count += 1;
-                    groups.push(parse_group_summary(item));
+                    groups.push(parse_group(item));
                 }
                 Some("generated") => {
                     generated_count += 1;
-                    generated_items.push(parse_generated_summary(item));
+                    generated_items.push(parse_generated_item(item));
+                }
+                Some("image") => {
+                    image_count += 1;
+                    images.push(parse_image(item));
                 }
                 Some("gr_line") => {
                     graphic_count += 1;
                     gr_line_count += 1;
-                    graphics.push(parse_graphic_summary(item, "gr_line"));
+                    graphics.push(parse_graphic(item, "gr_line"));
                 }
                 Some("gr_rect") => {
                     graphic_count += 1;
                     gr_rect_count += 1;
-                    graphics.push(parse_graphic_summary(item, "gr_rect"));
+                    graphics.push(parse_graphic(item, "gr_rect"));
                 }
                 Some("gr_circle") => {
                     graphic_count += 1;
                     gr_circle_count += 1;
-                    graphics.push(parse_graphic_summary(item, "gr_circle"));
+                    graphics.push(parse_graphic(item, "gr_circle"));
                 }
                 Some("gr_arc") => {
                     graphic_count += 1;
                     gr_arc_count += 1;
-                    graphics.push(parse_graphic_summary(item, "gr_arc"));
+                    graphics.push(parse_graphic(item, "gr_arc"));
                 }
                 Some("gr_poly") => {
                     graphic_count += 1;
                     gr_poly_count += 1;
-                    graphics.push(parse_graphic_summary(item, "gr_poly"));
+                    graphics.push(parse_graphic(item, "gr_poly"));
                 }
                 Some("gr_curve") => {
                     graphic_count += 1;
                     gr_curve_count += 1;
-                    graphics.push(parse_graphic_summary(item, "gr_curve"));
+                    graphics.push(parse_graphic(item, "gr_curve"));
                 }
                 Some("gr_text") => {
                     graphic_count += 1;
                     gr_text_count += 1;
-                    graphics.push(parse_graphic_summary(item, "gr_text"));
+                    graphics.push(parse_graphic(item, "gr_text"));
                 }
                 Some("gr_text_box") => {
                     graphic_count += 1;
                     gr_text_box_count += 1;
-                    graphics.push(parse_graphic_summary(item, "gr_text_box"));
+                    graphics.push(parse_graphic(item, "gr_text_box"));
                 }
                 Some(h) if h.starts_with("gr_") => {
                     graphic_count += 1;
-                    graphics.push(parse_graphic_summary(item, h));
+                    graphics.push(parse_graphic(item, h));
                 }
                 _ => {
                     if let Some(unknown) = UnknownNode::from_node(item) {
@@ -702,6 +809,8 @@ fn parse_ast(cst: &CstDocument) -> PcbAst {
         targets,
         groups,
         graphics,
+        images,
+        image_count,
         layer_count,
         property_count,
         net_count,
@@ -759,16 +868,28 @@ fn parse_net(node: &Node) -> PcbNet {
     PcbNet { code, name }
 }
 
-fn parse_footprint_summary(node: &Node) -> PcbFootprintSummary {
+fn parse_footprint(node: &Node) -> PcbFootprint {
     let Node::List { items, .. } = node else {
-        return PcbFootprintSummary {
+        return PcbFootprint {
             lib_id: None,
             layer: None,
             at: None,
             rotation: None,
             uuid: None,
-            property_count: 0,
-            pad_count: 0,
+            locked: false,
+            placed: false,
+            tedit: None,
+            path: None,
+            descr: None,
+            tags: None,
+            autoplace_cost90: None,
+            autoplace_cost180: None,
+            attr: Vec::new(),
+            private_layers: Vec::new(),
+            net_tie_pad_groups: Vec::new(),
+            properties: Vec::new(),
+            pads: Vec::new(),
+            models: Vec::new(),
             model_count: 0,
             zone_count: 0,
             group_count: 0,
@@ -791,8 +912,22 @@ fn parse_footprint_summary(node: &Node) -> PcbFootprintSummary {
     let mut at = None;
     let mut rotation = None;
     let mut uuid = None;
-    let mut property_count = 0usize;
-    let mut pad_count = 0usize;
+    let mut locked = items
+        .iter()
+        .any(|n| matches!(n, Node::Atom { atom: Atom::Symbol(s), .. } if s == "locked"));
+    let mut placed = false;
+    let mut tedit = None;
+    let mut path = None;
+    let mut descr = None;
+    let mut tags = None;
+    let mut autoplace_cost90 = None;
+    let mut autoplace_cost180 = None;
+    let mut attr = Vec::new();
+    let mut private_layers = Vec::new();
+    let mut net_tie_pad_groups = Vec::new();
+    let mut properties = Vec::new();
+    let mut pads = Vec::new();
+    let mut models = Vec::new();
     let mut model_count = 0usize;
     let mut zone_count = 0usize;
     let mut group_count = 0usize;
@@ -809,65 +944,99 @@ fn parse_footprint_summary(node: &Node) -> PcbFootprintSummary {
     let mut value = None;
 
     for child in items.iter().skip(2) {
-        let Some(head) = head_of(child) else {
-            continue;
-        };
-        match head {
-            "layer" => {
+        match head_of(child) {
+            Some("layer") => {
                 layer = second_atom_string(child);
             }
-            "at" => {
+            Some("at") => {
                 let (xy, rot) = parse_xy_and_angle(child);
                 at = xy;
                 rotation = rot;
             }
-            "uuid" => uuid = second_atom_string(child),
-            "property" => {
-                property_count += 1;
+            Some("uuid") => uuid = second_atom_string(child),
+            Some("locked") => locked = true,
+            Some("placed") => placed = true,
+            Some("tedit") => tedit = second_atom_string(child),
+            Some("path") => path = second_atom_string(child),
+            Some("descr") => descr = second_atom_string(child),
+            Some("tags") => tags = second_atom_string(child),
+            Some("autoplace_cost90") => autoplace_cost90 = second_atom_i32(child),
+            Some("autoplace_cost180") => autoplace_cost180 = second_atom_i32(child),
+            Some("attr") => {
+                if let Node::List { items: attrs, .. } = child {
+                    attr = attrs.iter().skip(1).filter_map(atom_as_string).collect();
+                }
+            }
+            Some("private_layers") => private_layers = parse_layer_names(child),
+            Some("net_tie_pad_groups") => {
+                if let Node::List { items: groups, .. } = child {
+                    net_tie_pad_groups = groups
+                        .iter()
+                        .skip(1)
+                        .filter_map(atom_as_string)
+                        .map(|group| {
+                            group
+                                .split(',')
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty())
+                                .map(ToOwned::to_owned)
+                                .collect::<Vec<_>>()
+                        })
+                        .filter(|group| !group.is_empty())
+                        .collect();
+                }
+            }
+            Some("property") => {
                 let Node::List { items: props, .. } = child else {
                     continue;
                 };
                 let key = props.get(1).and_then(atom_as_string);
                 let val = props.get(2).and_then(atom_as_string);
+                if let (Some(key), Some(value)) = (key.clone(), val.clone()) {
+                    properties.push(PcbProperty { key, value });
+                }
                 match key.as_deref() {
                     Some("Reference") => reference = val,
                     Some("Value") => value = val,
                     _ => {}
                 }
             }
-            "pad" => pad_count += 1,
-            "model" => model_count += 1,
-            "zone" => zone_count += 1,
-            "group" => group_count += 1,
-            "fp_line" => {
+            Some("pad") => pads.push(parse_pad(child)),
+            Some("model") => {
+                models.push(parse_footprint_model(child));
+                model_count += 1;
+            }
+            Some("zone") => zone_count += 1,
+            Some("group") => group_count += 1,
+            Some("fp_line") => {
                 graphic_count += 1;
                 fp_line_count += 1;
             }
-            "fp_rect" => {
+            Some("fp_rect") => {
                 graphic_count += 1;
                 fp_rect_count += 1;
             }
-            "fp_circle" => {
+            Some("fp_circle") => {
                 graphic_count += 1;
                 fp_circle_count += 1;
             }
-            "fp_arc" => {
+            Some("fp_arc") => {
                 graphic_count += 1;
                 fp_arc_count += 1;
             }
-            "fp_poly" => {
+            Some("fp_poly") => {
                 graphic_count += 1;
                 fp_poly_count += 1;
             }
-            "fp_curve" => {
+            Some("fp_curve") => {
                 graphic_count += 1;
                 fp_curve_count += 1;
             }
-            "fp_text" => {
+            Some("fp_text") => {
                 graphic_count += 1;
                 fp_text_count += 1;
             }
-            "fp_text_box" => {
+            Some("fp_text_box") => {
                 graphic_count += 1;
                 fp_text_box_count += 1;
             }
@@ -875,14 +1044,26 @@ fn parse_footprint_summary(node: &Node) -> PcbFootprintSummary {
         }
     }
 
-    PcbFootprintSummary {
+    PcbFootprint {
         lib_id,
         layer,
         at,
         rotation,
         uuid,
-        property_count,
-        pad_count,
+        locked,
+        placed,
+        tedit,
+        path,
+        descr,
+        tags,
+        autoplace_cost90,
+        autoplace_cost180,
+        attr,
+        private_layers,
+        net_tie_pad_groups,
+        properties,
+        pads,
+        models,
         model_count,
         zone_count,
         group_count,
@@ -900,7 +1081,297 @@ fn parse_footprint_summary(node: &Node) -> PcbFootprintSummary {
     }
 }
 
-fn parse_segment_summary(node: &Node) -> PcbSegmentSummary {
+fn parse_pad(node: &Node) -> PcbPad {
+    let Node::List { items, .. } = node else {
+        return PcbPad {
+            number: None,
+            pad_type: None,
+            shape: None,
+            at: None,
+            rotation: None,
+            size: None,
+            layers: Vec::new(),
+            net: None,
+            drill: None,
+            uuid: None,
+            pin_function: None,
+            pin_type: None,
+            locked: false,
+            property: None,
+            remove_unused_layers: false,
+            keep_end_layers: false,
+            roundrect_rratio: None,
+            chamfer_ratio: None,
+            chamfer: Vec::new(),
+            die_length: None,
+            solder_mask_margin: None,
+            solder_paste_margin: None,
+            solder_paste_margin_ratio: None,
+            clearance: None,
+            zone_connect: None,
+            thermal_width: None,
+            thermal_gap: None,
+            custom_clearance: None,
+            custom_anchor: None,
+            custom_primitives: 0,
+        };
+    };
+
+    let number = items.get(1).and_then(atom_as_string);
+    let pad_type = items.get(2).and_then(atom_as_string);
+    let shape = items.get(3).and_then(atom_as_string);
+    let mut at = None;
+    let mut rotation = None;
+    let mut size = None;
+    let mut layers = Vec::new();
+    let mut net = None;
+    let mut drill = None;
+    let mut uuid = None;
+    let mut pin_function = None;
+    let mut pin_type = None;
+    let mut locked = items
+        .iter()
+        .any(|n| matches!(n, Node::Atom { atom: Atom::Symbol(s), .. } if s == "locked"));
+    let mut property = None;
+    let mut remove_unused_layers = false;
+    let mut keep_end_layers = false;
+    let mut roundrect_rratio = None;
+    let mut chamfer_ratio = None;
+    let mut chamfer = Vec::new();
+    let mut die_length = None;
+    let mut solder_mask_margin = None;
+    let mut solder_paste_margin = None;
+    let mut solder_paste_margin_ratio = None;
+    let mut clearance = None;
+    let mut zone_connect = None;
+    let mut thermal_width = None;
+    let mut thermal_gap = None;
+    let mut custom_clearance = None;
+    let mut custom_anchor = None;
+    let mut custom_primitives = 0usize;
+
+    for child in items.iter().skip(4) {
+        match head_of(child) {
+            Some("at") => {
+                let (xy, rot) = parse_xy_and_angle(child);
+                at = xy;
+                rotation = rot;
+            }
+            Some("size") => size = parse_xy(child),
+            Some("layers") => layers = parse_layer_names(child),
+            Some("net") => net = Some(parse_pad_net(child)),
+            Some("drill") => drill = Some(parse_pad_drill(child)),
+            Some("uuid") => uuid = second_atom_string(child),
+            Some("pinfunction") => pin_function = second_atom_string(child),
+            Some("pintype") => pin_type = second_atom_string(child),
+            Some("locked") => locked = true,
+            Some("property") => property = second_atom_string(child),
+            Some("remove_unused_layer") | Some("remove_unused_layers") => {
+                remove_unused_layers = true
+            }
+            Some("keep_end_layers") => keep_end_layers = true,
+            Some("roundrect_rratio") => roundrect_rratio = second_atom_f64(child),
+            Some("chamfer_ratio") => chamfer_ratio = second_atom_f64(child),
+            Some("chamfer") => {
+                if let Node::List { items: corners, .. } = child {
+                    chamfer = corners.iter().skip(1).filter_map(atom_as_string).collect();
+                }
+            }
+            Some("die_length") => die_length = second_atom_f64(child),
+            Some("solder_mask_margin") => solder_mask_margin = second_atom_f64(child),
+            Some("solder_paste_margin") => solder_paste_margin = second_atom_f64(child),
+            Some("solder_paste_margin_ratio") => solder_paste_margin_ratio = second_atom_f64(child),
+            Some("clearance") => clearance = second_atom_f64(child),
+            Some("zone_connect") => zone_connect = second_atom_i32(child),
+            Some("thermal_width") => thermal_width = second_atom_f64(child),
+            Some("thermal_gap") => thermal_gap = second_atom_f64(child),
+            Some("options") => {
+                if let Node::List { items: options, .. } = child {
+                    for option in options.iter().skip(1) {
+                        match head_of(option) {
+                            Some("clearance") => custom_clearance = second_atom_string(option),
+                            Some("anchor") => custom_anchor = second_atom_string(option),
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            Some("primitives") => {
+                if let Node::List {
+                    items: primitives, ..
+                } = child
+                {
+                    custom_primitives = primitives.len().saturating_sub(1);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    PcbPad {
+        number,
+        pad_type,
+        shape,
+        at,
+        rotation,
+        size,
+        layers,
+        net,
+        drill,
+        uuid,
+        pin_function,
+        pin_type,
+        locked,
+        property,
+        remove_unused_layers,
+        keep_end_layers,
+        roundrect_rratio,
+        chamfer_ratio,
+        chamfer,
+        die_length,
+        solder_mask_margin,
+        solder_paste_margin,
+        solder_paste_margin_ratio,
+        clearance,
+        zone_connect,
+        thermal_width,
+        thermal_gap,
+        custom_clearance,
+        custom_anchor,
+        custom_primitives,
+    }
+}
+
+fn parse_model_xyz(node: &Node) -> Option<[f64; 3]> {
+    let parse_triplet = |items: &[Node]| -> Option<[f64; 3]> {
+        Some([
+            items.get(1).and_then(atom_as_f64)?,
+            items.get(2).and_then(atom_as_f64)?,
+            items.get(3).and_then(atom_as_f64)?,
+        ])
+    };
+
+    let Node::List { items, .. } = node else {
+        return None;
+    };
+
+    if matches!(head_of(node), Some("xyz")) {
+        return parse_triplet(items);
+    }
+
+    if let Some(Node::List {
+        items: xyz_items, ..
+    }) = items.get(1)
+    {
+        if matches!(head_of(items.get(1)?), Some("xyz")) {
+            return parse_triplet(xyz_items);
+        }
+    }
+
+    parse_triplet(items)
+}
+
+fn parse_footprint_model(node: &Node) -> PcbFootprintModel {
+    let Node::List { items, .. } = node else {
+        return PcbFootprintModel {
+            path: None,
+            at: None,
+            scale: None,
+            rotate: None,
+            hide: false,
+        };
+    };
+
+    let path = items.get(1).and_then(atom_as_string);
+    let mut at = None;
+    let mut scale = None;
+    let mut rotate = None;
+    let mut hide = items
+        .iter()
+        .any(|n| matches!(n, Node::Atom { atom: Atom::Symbol(s), .. } if s == "hide"));
+
+    for child in items.iter().skip(2) {
+        match head_of(child) {
+            Some("at") | Some("offset") => at = parse_model_xyz(child),
+            Some("scale") => scale = parse_model_xyz(child),
+            Some("rotate") => rotate = parse_model_xyz(child),
+            Some("hide") => hide = true,
+            _ => {}
+        }
+    }
+
+    PcbFootprintModel {
+        path,
+        at,
+        scale,
+        rotate,
+        hide,
+    }
+}
+
+fn parse_pad_net(node: &Node) -> PcbPadNet {
+    let Node::List { items, .. } = node else {
+        return PcbPadNet {
+            code: None,
+            name: None,
+        };
+    };
+    let code = items.get(1).and_then(atom_as_i32);
+    let name = items.get(2).and_then(atom_as_string);
+    PcbPadNet { code, name }
+}
+fn parse_pad_drill(node: &Node) -> PcbPadDrill {
+    let Node::List { items, .. } = node else {
+        return PcbPadDrill {
+            shape: None,
+            diameter: None,
+            width: None,
+            offset: None,
+        };
+    };
+
+    let mut shape = None;
+    let mut diameter = None;
+    let mut width = None;
+    let mut offset = None;
+
+    for child in items.iter().skip(1) {
+        match child {
+            Node::List { .. } => {
+                if matches!(head_of(child), Some("offset")) {
+                    offset = parse_xy(child);
+                }
+            }
+            Node::Atom { .. } => {
+                if let Some(value) = atom_as_f64(child) {
+                    if diameter.is_none() {
+                        diameter = Some(value);
+                    } else if width.is_none() {
+                        width = Some(value);
+                    }
+                } else if let Some(token) = atom_as_string(child) {
+                    shape = Some(token);
+                }
+            }
+        }
+    }
+
+    PcbPadDrill {
+        shape,
+        diameter,
+        width,
+        offset,
+    }
+}
+
+fn parse_layer_names(node: &Node) -> Vec<String> {
+    let Node::List { items, .. } = node else {
+        return Vec::new();
+    };
+    items.iter().skip(1).filter_map(atom_as_string).collect()
+}
+
+fn parse_segment(node: &Node) -> PcbSegment {
     let mut start = None;
     let mut end = None;
     let mut width = None;
@@ -925,7 +1396,7 @@ fn parse_segment_summary(node: &Node) -> PcbSegmentSummary {
             }
         }
     }
-    PcbSegmentSummary {
+    PcbSegment {
         start,
         end,
         width,
@@ -936,7 +1407,7 @@ fn parse_segment_summary(node: &Node) -> PcbSegmentSummary {
     }
 }
 
-fn parse_arc_summary(node: &Node) -> PcbArcSummary {
+fn parse_arc(node: &Node) -> PcbArc {
     let mut start = None;
     let mut mid = None;
     let mut end = None;
@@ -963,7 +1434,7 @@ fn parse_arc_summary(node: &Node) -> PcbArcSummary {
             }
         }
     }
-    PcbArcSummary {
+    PcbArc {
         start,
         mid,
         end,
@@ -975,7 +1446,7 @@ fn parse_arc_summary(node: &Node) -> PcbArcSummary {
     }
 }
 
-fn parse_via_summary(node: &Node) -> PcbViaSummary {
+fn parse_via(node: &Node) -> PcbVia {
     let mut at = None;
     let mut size = None;
     let mut drill = None;
@@ -1033,7 +1504,7 @@ fn parse_via_summary(node: &Node) -> PcbViaSummary {
             }
         }
     }
-    PcbViaSummary {
+    PcbVia {
         at,
         size,
         drill,
@@ -1048,7 +1519,7 @@ fn parse_via_summary(node: &Node) -> PcbViaSummary {
     }
 }
 
-fn parse_zone_summary(node: &Node) -> PcbZoneSummary {
+fn parse_zone(node: &Node) -> PcbZone {
     let mut net = None;
     let mut net_name = None;
     let mut name = None;
@@ -1080,7 +1551,7 @@ fn parse_zone_summary(node: &Node) -> PcbZoneSummary {
             }
         }
     }
-    PcbZoneSummary {
+    PcbZone {
         net,
         net_name,
         name,
@@ -1094,7 +1565,7 @@ fn parse_zone_summary(node: &Node) -> PcbZoneSummary {
     }
 }
 
-fn parse_generated_summary(node: &Node) -> PcbGeneratedSummary {
+fn parse_generated_item(node: &Node) -> PcbGeneratedItem {
     let mut uuid = None;
     let mut generated_type = None;
     let mut name = None;
@@ -1120,7 +1591,7 @@ fn parse_generated_summary(node: &Node) -> PcbGeneratedSummary {
         }
     }
 
-    PcbGeneratedSummary {
+    PcbGeneratedItem {
         uuid,
         generated_type,
         name,
@@ -1130,7 +1601,7 @@ fn parse_generated_summary(node: &Node) -> PcbGeneratedSummary {
     }
 }
 
-fn parse_dimension_summary(node: &Node) -> PcbDimensionSummary {
+fn parse_dimension(node: &Node) -> PcbDimension {
     let mut dimension_type = None;
     let mut layer = None;
     let mut gr_text_count = 0usize;
@@ -1148,7 +1619,7 @@ fn parse_dimension_summary(node: &Node) -> PcbDimensionSummary {
             }
         }
     }
-    PcbDimensionSummary {
+    PcbDimension {
         dimension_type,
         layer,
         gr_text_count,
@@ -1156,7 +1627,7 @@ fn parse_dimension_summary(node: &Node) -> PcbDimensionSummary {
     }
 }
 
-fn parse_target_summary(node: &Node) -> PcbTargetSummary {
+fn parse_target(node: &Node) -> PcbTarget {
     let mut shape = None;
     let mut at = None;
     let mut size = None;
@@ -1174,7 +1645,7 @@ fn parse_target_summary(node: &Node) -> PcbTargetSummary {
             }
         }
     }
-    PcbTargetSummary {
+    PcbTarget {
         shape,
         at,
         size,
@@ -1183,7 +1654,7 @@ fn parse_target_summary(node: &Node) -> PcbTargetSummary {
     }
 }
 
-fn parse_group_summary(node: &Node) -> PcbGroupSummary {
+fn parse_group(node: &Node) -> PcbGroup {
     let mut name = None;
     let mut group_id = None;
     let mut member_count = 0usize;
@@ -1201,14 +1672,14 @@ fn parse_group_summary(node: &Node) -> PcbGroupSummary {
             }
         }
     }
-    PcbGroupSummary {
+    PcbGroup {
         name,
         group_id,
         member_count,
     }
 }
 
-fn parse_graphic_summary(node: &Node, token: &str) -> PcbGraphicSummary {
+fn parse_graphic(node: &Node, token: &str) -> PcbGraphic {
     let mut layer = None;
     let mut text = None;
     let mut start = None;
@@ -1216,6 +1687,13 @@ fn parse_graphic_summary(node: &Node, token: &str) -> PcbGraphicSummary {
     let mut center = None;
     let mut uuid = None;
     let mut locked = false;
+    let mut width = None;
+    let mut stroke_type = None;
+    let mut fill_type = None;
+    let mut at = None;
+    let mut angle = None;
+    let mut font_size = None;
+    let mut font_thickness = None;
 
     if let Node::List { items, .. } = node {
         // Only text graphics treat second token as content.
@@ -1231,6 +1709,59 @@ fn parse_graphic_summary(node: &Node, token: &str) -> PcbGraphicSummary {
                 Some("start") => start = parse_xy(child),
                 Some("end") => end = parse_xy(child),
                 Some("center") => center = parse_xy(child),
+                Some("width") => width = second_atom_f64(child),
+                Some("stroke") => {
+                    if let Node::List {
+                        items: stroke_items,
+                        ..
+                    } = child
+                    {
+                        for stroke_child in stroke_items.iter().skip(1) {
+                            match head_of(stroke_child) {
+                                Some("width") => width = second_atom_f64(stroke_child),
+                                Some("type") => stroke_type = second_atom_string(stroke_child),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Some("fill") => fill_type = second_atom_string(child),
+                Some("at") => {
+                    let (xy, rot) = parse_xy_and_angle(child);
+                    at = xy;
+                    angle = rot;
+                }
+                Some("angle") => angle = second_atom_f64(child),
+                Some("effects") => {
+                    if let Node::List {
+                        items: effects_items,
+                        ..
+                    } = child
+                    {
+                        for effect_child in effects_items.iter().skip(1) {
+                            match head_of(effect_child) {
+                                Some("font") => {
+                                    if let Node::List {
+                                        items: font_items, ..
+                                    } = effect_child
+                                    {
+                                        for font_child in font_items.iter().skip(1) {
+                                            match head_of(font_child) {
+                                                Some("size") => font_size = parse_xy(font_child),
+                                                Some("thickness") => {
+                                                    font_thickness = second_atom_f64(font_child)
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                }
+                                Some("thickness") => font_thickness = second_atom_f64(effect_child),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
                 Some("uuid") => uuid = second_atom_string(child),
                 Some("locked") => locked = true,
                 _ => {}
@@ -1238,7 +1769,7 @@ fn parse_graphic_summary(node: &Node, token: &str) -> PcbGraphicSummary {
         }
     }
 
-    PcbGraphicSummary {
+    PcbGraphic {
         token: token.to_string(),
         layer,
         text,
@@ -1247,6 +1778,51 @@ fn parse_graphic_summary(node: &Node, token: &str) -> PcbGraphicSummary {
         center,
         uuid,
         locked,
+        width,
+        stroke_type,
+        fill_type,
+        at,
+        angle,
+        font_size,
+        font_thickness,
+    }
+}
+
+fn parse_image(node: &Node) -> PcbImage {
+    let mut at = None;
+    let mut layer = None;
+    let mut scale = None;
+    let mut uuid = None;
+    let mut locked = false;
+    let mut data = None;
+
+    if let Node::List { items, .. } = node {
+        locked = items
+            .iter()
+            .any(|n| matches!(n, Node::Atom { atom: Atom::Symbol(s), .. } if s == "locked"));
+        for child in items.iter().skip(1) {
+            match head_of(child) {
+                Some("at") => {
+                    let (xy, _) = parse_xy_and_angle(child);
+                    at = xy;
+                }
+                Some("layer") => layer = second_atom_string(child),
+                Some("scale") => scale = second_atom_f64(child),
+                Some("uuid") => uuid = second_atom_string(child),
+                Some("locked") => locked = true,
+                Some("data") => data = second_atom_string(child),
+                _ => {}
+            }
+        }
+    }
+
+    PcbImage {
+        at,
+        layer,
+        scale,
+        uuid,
+        locked,
+        data,
     }
 }
 
@@ -1265,7 +1841,7 @@ fn parse_property(node: &Node) -> Option<PcbProperty> {
     Some(PcbProperty { key, value })
 }
 
-fn parse_general_summary(node: &Node) -> PcbGeneralSummary {
+fn parse_general(node: &Node) -> PcbGeneral {
     let mut thickness = None;
     let mut legacy_teardrops = None;
     if let Node::List { items, .. } = node {
@@ -1277,13 +1853,13 @@ fn parse_general_summary(node: &Node) -> PcbGeneralSummary {
             }
         }
     }
-    PcbGeneralSummary {
+    PcbGeneral {
         thickness,
         legacy_teardrops,
     }
 }
 
-fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
+fn parse_setup(node: &Node) -> PcbSetup {
     let mut has_stackup = false;
     let mut stackup_layer_count = 0usize;
     let mut has_plot_settings = false;
@@ -1291,6 +1867,14 @@ fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
     let mut solder_mask_min_width = None;
     let mut aux_axis_origin = None;
     let mut grid_origin = None;
+    let mut pad_to_paste_clearance = None;
+    let mut pad_to_paste_clearance_ratio = None;
+    let mut allow_soldermask_bridges_in_fps = None;
+    let mut copper_finish = None;
+    let mut dielectric_constraints = None;
+    let mut edge_connector = None;
+    let mut castellated_pads = None;
+    let mut edge_plating = None;
     let mut setup_tokens = Vec::new();
 
     if let Node::List { items, .. } = node {
@@ -1316,13 +1900,26 @@ fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
                     "solder_mask_min_width" => solder_mask_min_width = second_atom_f64(child),
                     "aux_axis_origin" => aux_axis_origin = parse_xy(child),
                     "grid_origin" => grid_origin = parse_xy(child),
+                    "pad_to_paste_clearance" => pad_to_paste_clearance = second_atom_f64(child),
+                    "pad_to_paste_clearance_ratio" => {
+                        pad_to_paste_clearance_ratio = second_atom_f64(child)
+                    }
+                    "allow_soldermask_bridges_in_footprints"
+                    | "allow_soldermask_bridges_in_fps" => {
+                        allow_soldermask_bridges_in_fps = second_atom_bool(child)
+                    }
+                    "copper_finish" => copper_finish = second_atom_string(child),
+                    "dielectric_constraints" => dielectric_constraints = second_atom_bool(child),
+                    "edge_connector" => edge_connector = second_atom_string(child),
+                    "castellated_pads" => castellated_pads = second_atom_bool(child),
+                    "edge_plating" => edge_plating = second_atom_bool(child),
                     _ => {}
                 }
             }
         }
     }
 
-    PcbSetupSummary {
+    PcbSetup {
         has_stackup,
         stackup_layer_count,
         has_plot_settings,
@@ -1330,6 +1927,14 @@ fn parse_setup_summary(node: &Node) -> PcbSetupSummary {
         solder_mask_min_width,
         aux_axis_origin,
         grid_origin,
+        pad_to_paste_clearance,
+        pad_to_paste_clearance_ratio,
+        allow_soldermask_bridges_in_fps,
+        copper_finish,
+        dielectric_constraints,
+        edge_connector,
+        castellated_pads,
+        edge_plating,
         setup_tokens,
     }
 }
@@ -1363,7 +1968,16 @@ fn collect_unrecognized_setup_children(node: &Node, out: &mut Vec<UnknownNode>) 
             | Some("pad_to_mask_clearance")
             | Some("solder_mask_min_width")
             | Some("aux_axis_origin")
-            | Some("grid_origin") => {}
+            | Some("grid_origin")
+            | Some("pad_to_paste_clearance")
+            | Some("pad_to_paste_clearance_ratio")
+            | Some("allow_soldermask_bridges_in_footprints")
+            | Some("allow_soldermask_bridges_in_fps")
+            | Some("copper_finish")
+            | Some("dielectric_constraints")
+            | Some("edge_connector")
+            | Some("castellated_pads")
+            | Some("edge_plating") => {}
             _ => {
                 if let Some(unknown) = UnknownNode::from_node(child) {
                     out.push(unknown);
@@ -1372,7 +1986,6 @@ fn collect_unrecognized_setup_children(node: &Node, out: &mut Vec<UnknownNode>) 
         }
     }
 }
-
 fn parse_xy(node: &Node) -> Option<[f64; 2]> {
     let Node::List { items, .. } = node else {
         return None;
@@ -1583,12 +2196,26 @@ mod tests {
         assert_eq!(doc.ast().footprints[0].uuid.as_deref(), Some("fp-1"));
         assert_eq!(doc.ast().footprints[0].reference.as_deref(), Some("R1"));
         assert_eq!(doc.ast().footprints[0].value.as_deref(), Some("1k"));
-        assert_eq!(doc.ast().footprints[0].property_count, 2);
-        assert_eq!(doc.ast().footprints[0].pad_count, 1);
+        assert_eq!(doc.ast().footprints[0].properties.len(), 2);
+        assert_eq!(doc.ast().footprints[0].pads.len(), 1);
         assert_eq!(doc.ast().footprints[0].model_count, 1);
         assert_eq!(doc.ast().footprints[0].graphic_count, 2);
         assert_eq!(doc.ast().footprints[0].fp_line_count, 1);
         assert_eq!(doc.ast().footprints[0].fp_text_count, 1);
+        assert_eq!(doc.ast().footprints[0].pads[0].number.as_deref(), Some("1"));
+        assert_eq!(
+            doc.ast().footprints[0].pads[0].pad_type.as_deref(),
+            Some("smd")
+        );
+        assert_eq!(
+            doc.ast().footprints[0].pads[0].shape.as_deref(),
+            Some("rect")
+        );
+        assert_eq!(doc.ast().footprints[0].pads[0].at, Some([0.0, 0.0]));
+        assert_eq!(doc.ast().footprints[0].pads[0].size, Some([1.0, 1.0]));
+        assert_eq!(doc.ast().footprints[0].pads[0].layers.len(), 2);
+        assert_eq!(doc.ast().footprints[0].pads[0].layers[0].as_str(), "F.Cu");
+        assert_eq!(doc.ast().footprints[0].pads[0].layers[1].as_str(), "F.Mask");
         assert_eq!(doc.ast().graphic_count, 1);
         assert_eq!(doc.ast().gr_line_count, 1);
         assert_eq!(doc.ast().graphics.len(), 1);
@@ -1643,6 +2270,43 @@ mod tests {
         assert!(doc.ast().has_embedded_files);
         assert_eq!(doc.ast().embedded_file_count, 2);
         assert!(doc.ast().unknown_nodes.is_empty());
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn parses_detailed_footprint_pad_data() {
+        let path = tmp_file("pcb_footprint_pad_details");
+        let src = "(kicad_pcb (version 20260101) (generator pcbnew)\n  (net 1 \"GND\")\n  (footprint \"Connector\"\n    (at 12.5 30 180)\n    (layer F.Cu)\n    (property \"Reference\" \"J1\")\n    (pad \"1\" thru_hole circle\n      (at 1 2 90)\n      (size 1.4 1.4)\n      (drill oval 0.9 0.7 (offset 0.1 0.2))\n      (layers *.Cu *.Mask)\n      (net 1 \"GND\")\n      (pinfunction \"A\")\n      (pintype \"passive\")\n      (uuid \"pad-1\")\n    )\n  )\n)\n";
+        fs::write(&path, src).expect("write fixture");
+
+        let doc = PcbFile::read(&path).expect("read");
+        assert_eq!(doc.ast().footprints.len(), 1);
+        assert_eq!(doc.ast().footprints[0].pads.len(), 1);
+
+        let pad = &doc.ast().footprints[0].pads[0];
+        assert_eq!(pad.number.as_deref(), Some("1"));
+        assert_eq!(pad.pad_type.as_deref(), Some("thru_hole"));
+        assert_eq!(pad.shape.as_deref(), Some("circle"));
+        assert_eq!(pad.at, Some([1.0, 2.0]));
+        assert_eq!(pad.rotation, Some(90.0));
+        assert_eq!(pad.size, Some([1.4, 1.4]));
+        assert_eq!(pad.layers, vec!["*.Cu", "*.Mask"]);
+        assert_eq!(pad.net.as_ref().and_then(|n| n.code), Some(1));
+        assert_eq!(
+            pad.net.as_ref().and_then(|n| n.name.as_deref()),
+            Some("GND")
+        );
+        assert_eq!(
+            pad.drill.as_ref().and_then(|d| d.shape.as_deref()),
+            Some("oval")
+        );
+        assert_eq!(pad.drill.as_ref().and_then(|d| d.diameter), Some(0.9));
+        assert_eq!(pad.drill.as_ref().and_then(|d| d.width), Some(0.7));
+        assert_eq!(pad.drill.as_ref().and_then(|d| d.offset), Some([0.1, 0.2]));
+        assert_eq!(pad.pin_function.as_deref(), Some("A"));
+        assert_eq!(pad.pin_type.as_deref(), Some("passive"));
+        assert_eq!(pad.uuid.as_deref(), Some("pad-1"));
 
         let _ = fs::remove_file(path);
     }
